@@ -81,9 +81,9 @@ serve(async (req) => {
     console.log('Starting AI processing...');
 
     try {
-      // Using a more accessible model for audio classification
+      // Using MIT-licensed model for audio classification
       const result = await hf.audioClassification({
-        model: 'julien-c/speechbrain-spkrec-ecapa-voxceleb', // This is a more accessible model
+        model: 'mit/ast-finetuned-audioset-10-10-0.4593', // Public model with MIT license
         data: audioBlob
       });
 
