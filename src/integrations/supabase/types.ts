@@ -56,27 +56,33 @@ export type Database = {
       recordings: {
         Row: {
           created_at: string
+          duration: number | null
           filename: string
           id: string
           processed_text: string | null
+          status: Database["public"]["Enums"]["recording_status"] | null
           storage_path: string
           timestamp: string
           user_id: string | null
         }
         Insert: {
           created_at?: string
+          duration?: number | null
           filename: string
           id?: string
           processed_text?: string | null
+          status?: Database["public"]["Enums"]["recording_status"] | null
           storage_path: string
           timestamp?: string
           user_id?: string | null
         }
         Update: {
           created_at?: string
+          duration?: number | null
           filename?: string
           id?: string
           processed_text?: string | null
+          status?: Database["public"]["Enums"]["recording_status"] | null
           storage_path?: string
           timestamp?: string
           user_id?: string | null
@@ -91,7 +97,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      recording_status: "pending" | "processing" | "completed" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never

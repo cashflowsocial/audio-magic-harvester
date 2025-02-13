@@ -1,5 +1,4 @@
 
-import { HfInference } from '@huggingface/inference';
 import { supabase } from "@/integrations/supabase/client";
 
 export const processAudio = async (audioBlob: Blob) => {
@@ -29,35 +28,19 @@ export const saveToStorage = async (audioBlob: Blob) => {
         filename: filename,
         storage_path: data.path,
         timestamp: new Date().toISOString(),
+        status: 'completed' // Since we're not doing AI processing yet
       })
       .select()
       .single();
 
     if (dbError) throw dbError;
 
-    // Get the public URL before triggering processing
+    // Get and return the public URL
     const audioUrl = await getRecordingUrl(filename);
-
-    // Trigger AI processing with properly structured data
-    const { data: processingResult, error: processError } = await supabase.functions
-      .invoke('process-audio', {
-        body: {
-          recordingId: recording.id,
-          audioUrl: audioUrl
-        },
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-    if (processError) {
-      console.error('Error triggering audio processing:', processError);
-      throw processError;
-    }
-
+    
     return {
       filename,
-      processedTrackId: processingResult.processedTrackId
+      url: audioUrl
     };
   } catch (error) {
     console.error('Error saving to Supabase:', error);
@@ -73,13 +56,3 @@ export const getRecordingUrl = async (filename: string) => {
   return data.publicUrl;
 };
 
-export const checkProcessingStatus = async (processedTrackId: string) => {
-  const { data, error } = await supabase
-    .from('processed_tracks')
-    .select('*')
-    .eq('id', processedTrackId)
-    .single();
-
-  if (error) throw error;
-  return data;
-};

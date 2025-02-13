@@ -1,7 +1,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import { saveToStorage, processAudio, getRecordingUrl, checkProcessingStatus } from "@/utils/audioProcessing";
+import { saveToStorage, processAudio } from "@/utils/audioProcessing";
 
 export const useAudioRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -33,10 +33,6 @@ export const useAudioRecorder = () => {
       const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
       setAudioLevel(average);
       
-      if (Date.now() % 500 === 0) {
-        console.log('Current audio level:', average);
-      }
-      
       animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
     }
   };
@@ -62,46 +58,28 @@ export const useAudioRecorder = () => {
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
-          console.log('Recording data chunk received:', e.data.size, 'bytes');
         }
       };
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
-        console.log('Recording stopped. Total size:', audioBlob.size, 'bytes');
         setIsProcessing(true);
         
         try {
           const processedAudio = await processAudio(audioBlob);
           const result = await saveToStorage(processedAudio);
-          const url = await getRecordingUrl(result.filename);
-          setCurrentRecording(url);
+          setCurrentRecording(result.url);
           
-          const checkStatus = async () => {
-            const status = await checkProcessingStatus(result.processedTrackId);
-            if (status.processing_status === 'completed') {
-              toast({
-                title: "Success",
-                description: "Audio processed successfully!",
-              });
-            } else if (status.processing_status === 'failed') {
-              toast({
-                title: "Error",
-                description: "Failed to process the recording.",
-                variant: "destructive",
-              });
-            } else {
-              setTimeout(checkStatus, 2000);
-            }
-          };
-          
-          checkStatus();
+          toast({
+            title: "Success",
+            description: "Recording saved successfully!",
+          });
           
         } catch (error) {
           console.error('Error processing/saving audio:', error);
           toast({
             title: "Error",
-            description: "Failed to process or save the recording.",
+            description: "Failed to save the recording.",
             variant: "destructive",
           });
         } finally {
