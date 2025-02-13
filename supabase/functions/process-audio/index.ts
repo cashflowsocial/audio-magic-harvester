@@ -97,7 +97,7 @@ serve(async (req: Request) => {
       );
     }
 
-    // Initialize Hugging Face client
+    // Initialize Hugging Face client with proper configuration
     const hf = new HfInference(hfApiKey);
     console.log('Initialized Hugging Face client');
 
