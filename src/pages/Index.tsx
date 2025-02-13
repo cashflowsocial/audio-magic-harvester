@@ -21,7 +21,7 @@ const Index = () => {
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
         <h1 className="text-2xl font-bold text-center mb-8">Voice Recorder</h1>
         
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-6">
           <AudioLevel 
             level={audioLevel}
             isRecording={isRecording}
@@ -34,12 +34,14 @@ const Index = () => {
             onStopRecording={stopRecording}
           />
           
-          {currentRecording && (
-            <PlaybackControl
-              audioUrl={currentRecording}
-              isPlaying={isPlaying}
-              onPlayingChange={setIsPlaying}
-            />
+          {currentRecording && !isRecording && (
+            <div className="w-full">
+              <PlaybackControl
+                audioUrl={currentRecording}
+                isPlaying={isPlaying}
+                onPlayingChange={setIsPlaying}
+              />
+            </div>
           )}
         </div>
       </div>
