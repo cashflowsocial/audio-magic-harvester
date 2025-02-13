@@ -8,6 +8,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to convert ArrayBuffer to base64
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const uint8Array = new Uint8Array(buffer);
+  let binary = '';
+  uint8Array.forEach(byte => binary += String.fromCharCode(byte));
+  return btoa(binary);
+};
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -95,7 +103,7 @@ serve(async (req) => {
           
           const melodyArrayBuffer = await melodyResponse.arrayBuffer();
           result = {
-            audioData: Array.from(new Uint8Array(melodyArrayBuffer)),
+            audioContent: arrayBufferToBase64(melodyArrayBuffer),
             type: 'melody'
           };
           break;
@@ -113,23 +121,23 @@ serve(async (req) => {
             
             console.log('Drum separation completed');
             
-            // Convert binary data to array for safe JSON serialization
+            // Convert to base64 for safe storage
             const drumArrayBuffer = await drumResponse.arrayBuffer();
-            const drumArray = Array.from(new Uint8Array(drumArrayBuffer));
+            const drumBase64 = arrayBufferToBase64(drumArrayBuffer);
             
-            // Create a temporary blob for classification
-            const tempDrumBlob = new Blob([new Uint8Array(drumArrayBuffer)], { type: 'audio/wav' });
+            // Create a new blob for classification
+            const drumBlob = new Blob([drumArrayBuffer], { type: 'audio/wav' });
             
             console.log('Classifying drum patterns...');
             const drumClassification = await hf.audioClassification({
               model: 'antonibigata/drummids',
-              data: tempDrumBlob
+              data: drumBlob
             });
             
             console.log('Drum classification completed:', drumClassification);
             
             result = {
-              audioData: drumArray,
+              audioContent: drumBase64,
               classification: drumClassification,
               type: 'drums'
             };
@@ -150,7 +158,7 @@ serve(async (req) => {
           
           const instrArrayBuffer = await instrResponse.arrayBuffer();
           result = {
-            audioData: Array.from(new Uint8Array(instrArrayBuffer)),
+            audioContent: arrayBufferToBase64(instrArrayBuffer),
             type: 'instrumentation'
           };
           break;
