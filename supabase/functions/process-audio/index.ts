@@ -81,9 +81,9 @@ serve(async (req) => {
     console.log('Starting AI processing...');
 
     try {
-      // Use audio classification as a simpler test
+      // Using a more accessible model for audio classification
       const result = await hf.audioClassification({
-        model: 'facebook/wav2vec2-base-960h',
+        model: 'julien-c/speechbrain-spkrec-ecapa-voxceleb', // This is a more accessible model
         data: audioBlob
       });
 
@@ -107,7 +107,8 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           message: 'Audio processing completed',
-          processedTrackId: processedTrack.id
+          processedTrackId: processedTrack.id,
+          result
         }),
         { 
           headers: { 
@@ -124,7 +125,8 @@ serve(async (req) => {
       await supabaseClient
         .from('processed_tracks')
         .update({
-          processing_status: 'failed'
+          processing_status: 'failed',
+          error_message: processingError.message
         })
         .eq('id', processedTrack.id);
         
