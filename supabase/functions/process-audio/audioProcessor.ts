@@ -10,24 +10,16 @@ export const processAudio = async (
 ): Promise<ProcessingResult> => {
   console.log(`Processing ${processingType} extraction...`);
   
-  // Ensure proper headers for HF API calls
-  const requestOptions = {
-    headers: {
-      'Accept': 'audio/wav, audio/*, */*',
-      'Content-Type': 'audio/wav'
-    }
-  };
-  
   switch (processingType) {
     case 'melody':
       console.log('Starting melody extraction...');
-      const melodyResult = await hf.audioToAudio({
+      await hf.audioToAudio({
         model: 'facebook/demucs',
         data: audioBlob,
         parameters: {
           target: 'vocals'
         }
-      }, requestOptions);
+      });
       
       console.log('Melody extraction completed');
       return {
@@ -38,19 +30,19 @@ export const processAudio = async (
       
     case 'drums':
       console.log('Starting drums extraction...');
-      const drumsResult = await hf.audioToAudio({
+      await hf.audioToAudio({
         model: 'facebook/demucs',
         data: audioBlob,
         parameters: {
           target: 'drums'
         }
-      }, requestOptions);
+      });
       
       console.log('Starting drum classification...');
       const drumClassification = await hf.audioClassification({
         model: 'antonibigata/drummids',
         data: audioBlob
-      }, requestOptions);
+      });
       
       console.log('Drums processing completed');
       return {
@@ -62,13 +54,13 @@ export const processAudio = async (
       
     case 'instrumentation':
       console.log('Starting instrumentation extraction...');
-      const instrumentResult = await hf.audioToAudio({
+      await hf.audioToAudio({
         model: 'facebook/demucs',
         data: audioBlob,
         parameters: {
           target: 'other'
         }
-      }, requestOptions);
+      });
       
       console.log('Instrumentation extraction completed');
       return {
