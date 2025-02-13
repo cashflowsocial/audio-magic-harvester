@@ -9,6 +9,50 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      processed_tracks: {
+        Row: {
+          combined_file_path: string | null
+          created_at: string | null
+          drums_file_path: string | null
+          id: string
+          melody_file_path: string | null
+          processing_status: string | null
+          recording_id: string | null
+          updated_at: string | null
+          version: number | null
+        }
+        Insert: {
+          combined_file_path?: string | null
+          created_at?: string | null
+          drums_file_path?: string | null
+          id?: string
+          melody_file_path?: string | null
+          processing_status?: string | null
+          recording_id?: string | null
+          updated_at?: string | null
+          version?: number | null
+        }
+        Update: {
+          combined_file_path?: string | null
+          created_at?: string | null
+          drums_file_path?: string | null
+          id?: string
+          melody_file_path?: string | null
+          processing_status?: string | null
+          recording_id?: string | null
+          updated_at?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processed_tracks_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recordings: {
         Row: {
           created_at: string

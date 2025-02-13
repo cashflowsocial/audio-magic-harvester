@@ -28,15 +28,30 @@ export const saveToStorage = async (audioBlob: Blob) => {
     if (error) throw error;
 
     // Store the metadata in the database
-    const { error: dbError } = await supabase
+    const { data: recording, error: dbError } = await supabase
       .from('recordings')
       .insert({
         filename: filename,
         storage_path: data.path,
         timestamp: new Date().toISOString(),
-      });
+      })
+      .select()
+      .single();
 
     if (dbError) throw dbError;
+
+    // Trigger AI processing
+    const audioUrl = await getRecordingUrl(filename);
+    const { error: processError } = await supabase.functions.invoke('process-audio', {
+      body: {
+        recordingId: recording.id,
+        audioUrl: audioUrl
+      }
+    });
+
+    if (processError) {
+      console.error('Error triggering audio processing:', processError);
+    }
 
     return filename;
   } catch (error) {
