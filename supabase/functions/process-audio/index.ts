@@ -36,23 +36,26 @@ serve(async (req: Request) => {
 
     // Download the audio file
     console.log('Downloading audio file from:', urlData.publicUrl);
-    const audioResponse = await fetch(urlData.publicUrl, {
-      headers: {
-        'Accept': 'audio/*'
-      }
-    });
-    
-    if (!audioResponse.ok) {
-      throw new Error('Failed to download audio file');
-    }
-    
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/wav' });
-
-    // Create processed track record
-    const processedTrack = await createProcessedTrack(supabaseClient, recordingId, processingType);
-
     try {
+      const audioResponse = await fetch(urlData.publicUrl);
+      if (!audioResponse.ok) {
+        throw new Error(`Failed to download audio file: ${audioResponse.statusText}`);
+      }
+      
+      // Get the content type from the response
+      const contentType = audioResponse.headers.get('content-type') || 'audio/wav';
+      const arrayBuffer = await audioResponse.arrayBuffer();
+      
+      // Create a new blob with explicit type
+      const audioBlob = new Blob([arrayBuffer], { type: contentType });
+      console.log('Audio blob created successfully:', {
+        size: audioBlob.size,
+        type: audioBlob.type
+      });
+
+      // Create processed track record
+      const processedTrack = await createProcessedTrack(supabaseClient, recordingId, processingType);
+
       // Initialize Hugging Face client and process audio
       const hf = new HfInference(hfApiKey);
       console.log('Initialized Hugging Face client');
@@ -77,10 +80,9 @@ serve(async (req: Request) => {
         { headers: corsHeaders }
       );
 
-    } catch (processingError) {
-      console.error('Processing error:', processingError);
-      await markProcessingAsFailed(supabaseClient, processedTrack.id, processingError.message);
-      return createErrorResponse(processingError.message);
+    } catch (downloadError) {
+      console.error('Error downloading or processing audio:', downloadError);
+      return createErrorResponse(`Error processing audio: ${downloadError.message}`);
     }
 
   } catch (error) {
