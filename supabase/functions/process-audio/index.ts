@@ -87,19 +87,19 @@ serve(async (req) => {
         case 'melody':
           // Using Demucs model for melody extraction
           result = await hf.audioToAudio({
-            model: 'facebook/demucs',  // Source separation model
+            model: 'facebook/demucs',
             data: audioBlob,
             parameters: {
-              target: 'vocals'  // Extract the vocal/melody part
+              target: 'vocals'
             }
           });
           break;
           
         case 'drums':
           try {
-            // First separate drums using Demucs
             console.log('Starting drum separation...');
-            const drumSeparation = await hf.audioToAudio({
+            // First separate drums using Demucs
+            const drumResult = await hf.audioToAudio({
               model: 'facebook/demucs',
               data: audioBlob,
               parameters: {
@@ -109,10 +109,14 @@ serve(async (req) => {
             
             console.log('Drum separation completed, starting classification...');
             
-            // Convert AudioData to Blob for classification
-            const drumBlob = new Blob([drumSeparation], { type: 'audio/wav' });
+            // Store the drum audio data
+            const drumArrayBuffer = await drumResult.arrayBuffer();
+            const drumUint8Array = new Uint8Array(drumArrayBuffer);
             
-            // Then classify drum types
+            // Create a new blob with the correct audio type
+            const drumBlob = new Blob([drumUint8Array], { type: 'audio/wav' });
+            
+            console.log('Classifying drum patterns...');
             const drumClassification = await hf.audioClassification({
               model: 'antonibigata/drummids',
               data: drumBlob
@@ -120,9 +124,9 @@ serve(async (req) => {
             
             console.log('Drum classification completed:', drumClassification);
             
-            // Combine the results
+            // Store both the audio data and classification
             result = {
-              audioData: drumSeparation,
+              audioData: drumUint8Array,
               classification: drumClassification
             };
           } catch (drumError) {
@@ -132,12 +136,11 @@ serve(async (req) => {
           break;
           
         case 'instrumentation':
-          // Using Demucs model for full instrumental separation
           result = await hf.audioToAudio({
             model: 'facebook/demucs',
             data: audioBlob,
             parameters: {
-              target: 'other'  // Extract the instrumental part
+              target: 'other'
             }
           });
           break;
@@ -146,7 +149,7 @@ serve(async (req) => {
           throw new Error(`Unknown processing type: ${processingType}`);
       }
 
-      console.log('AI processing completed:', result);
+      console.log('AI processing completed');
 
       // Update the processed track with results
       const { error: updateError } = await supabaseClient
