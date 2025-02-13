@@ -10,7 +10,6 @@ const corsHeaders = {
 };
 
 serve(async (req: Request) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -33,7 +32,7 @@ serve(async (req: Request) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // First get the recording details
+    // Get the recording details
     const { data: recording, error: fetchError } = await supabaseClient
       .from('recordings')
       .select('*')
@@ -59,6 +58,14 @@ serve(async (req: Request) => {
       );
     }
 
+    // Download the audio file
+    console.log('Downloading audio file from:', urlData.publicUrl);
+    const audioResponse = await fetch(urlData.publicUrl);
+    if (!audioResponse.ok) {
+      throw new Error('Failed to download audio file');
+    }
+    const audioData = await audioResponse.blob();
+
     // Create a processed track record
     const { data: processedTrack, error: insertError } = await supabaseClient
       .from('processed_tracks')
@@ -79,15 +86,17 @@ serve(async (req: Request) => {
 
     // Initialize Hugging Face client
     const hf = new HfInference(hfApiKey);
+    console.log('Initialized Hugging Face client');
 
     try {
       let result;
       
       switch (processingType) {
         case 'melody':
-          await hf.audioToAudio({
+          console.log('Processing melody extraction...');
+          const melodyResult = await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: urlData.publicUrl,
+            data: audioData,
             parameters: {
               target: 'vocals'
             }
@@ -95,14 +104,17 @@ serve(async (req: Request) => {
           
           result = {
             type: 'melody',
-            url: urlData.publicUrl
+            url: urlData.publicUrl,
+            processed: true
           };
+          console.log('Melody extraction complete');
           break;
           
         case 'drums':
-          await hf.audioToAudio({
+          console.log('Processing drums extraction...');
+          const drumsResult = await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: urlData.publicUrl,
+            data: audioData,
             parameters: {
               target: 'drums'
             }
@@ -110,20 +122,23 @@ serve(async (req: Request) => {
           
           const drumClassification = await hf.audioClassification({
             model: 'antonibigata/drummids',
-            data: urlData.publicUrl
+            data: audioData
           });
           
           result = {
             type: 'drums',
             url: urlData.publicUrl,
-            classification: drumClassification
+            classification: drumClassification,
+            processed: true
           };
+          console.log('Drums extraction complete');
           break;
           
         case 'instrumentation':
-          await hf.audioToAudio({
+          console.log('Processing instrumentation extraction...');
+          const instrumentResult = await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: urlData.publicUrl,
+            data: audioData,
             parameters: {
               target: 'other'
             }
@@ -131,8 +146,10 @@ serve(async (req: Request) => {
           
           result = {
             type: 'instrumentation',
-            url: urlData.publicUrl
+            url: urlData.publicUrl,
+            processed: true
           };
+          console.log('Instrumentation extraction complete');
           break;
           
         default:
@@ -170,6 +187,7 @@ serve(async (req: Request) => {
       );
 
     } catch (processingError) {
+      console.error('Processing error:', processingError);
       // Update status to failed
       await supabaseClient
         .from('processed_tracks')
@@ -186,6 +204,7 @@ serve(async (req: Request) => {
     }
 
   } catch (error) {
+    console.error('General error:', error);
     return new Response(
       JSON.stringify({ error: error.message }), 
       { status: 500, headers: corsHeaders }
