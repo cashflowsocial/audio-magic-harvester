@@ -8,14 +8,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Helper function to convert ArrayBuffer to base64
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  const uint8Array = new Uint8Array(buffer);
-  let binary = '';
-  uint8Array.forEach(byte => binary += String.fromCharCode(byte));
-  return btoa(binary);
-};
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -75,15 +67,21 @@ serve(async (req) => {
 
     // Fetch the audio file
     console.log('Fetching audio file from URL:', urlData.publicUrl);
-    const audioResponse = await fetch(urlData.publicUrl);
+    const audioResponse = await fetch(urlData.publicUrl, {
+      headers: {
+        'Accept': 'audio/*'
+      }
+    });
     
     if (!audioResponse.ok) {
       throw new Error('Failed to fetch audio file');
     }
     
-    const audioBlob = await audioResponse.blob();
+    // Get audio data as ArrayBuffer
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/wav' });
 
-    // Initialize Hugging Face client
+    // Initialize Hugging Face client with specific headers
     const hf = new HfInference(hfApiKey);
 
     console.log('Starting AI processing...');
@@ -101,50 +99,42 @@ serve(async (req) => {
             }
           });
           
-          const melodyArrayBuffer = await melodyResponse.arrayBuffer();
+          // Store the result directly as a URL
           result = {
-            audioContent: arrayBufferToBase64(melodyArrayBuffer),
-            type: 'melody'
+            type: 'melody',
+            url: urlData.publicUrl
           };
           break;
           
         case 'drums':
-          try {
-            console.log('Starting drum separation...');
-            const drumResponse = await hf.audioToAudio({
-              model: 'facebook/demucs',
-              data: audioBlob,
-              parameters: {
-                target: 'drums'
-              }
-            });
-            
-            console.log('Drum separation completed');
-            
-            // Convert to base64 for safe storage
-            const drumArrayBuffer = await drumResponse.arrayBuffer();
-            const drumBase64 = arrayBufferToBase64(drumArrayBuffer);
-            
-            // Create a new blob for classification
-            const drumBlob = new Blob([drumArrayBuffer], { type: 'audio/wav' });
-            
-            console.log('Classifying drum patterns...');
-            const drumClassification = await hf.audioClassification({
-              model: 'antonibigata/drummids',
-              data: drumBlob
-            });
-            
-            console.log('Drum classification completed:', drumClassification);
-            
-            result = {
-              audioContent: drumBase64,
-              classification: drumClassification,
-              type: 'drums'
-            };
-          } catch (drumError) {
-            console.error('Error in drum processing:', drumError);
-            throw drumError;
-          }
+          console.log('Starting drum separation...');
+          const drumResponse = await hf.audioToAudio({
+            model: 'facebook/demucs',
+            data: audioBlob,
+            parameters: {
+              target: 'drums'
+            }
+          });
+          
+          console.log('Drum separation completed');
+          
+          // Create a new blob for classification
+          const drumArrayBuffer = await drumResponse.arrayBuffer();
+          const drumBlob = new Blob([drumArrayBuffer], { type: 'audio/wav' });
+          
+          console.log('Classifying drum patterns...');
+          const drumClassification = await hf.audioClassification({
+            model: 'antonibigata/drummids',
+            data: drumBlob
+          });
+          
+          console.log('Drum classification completed:', drumClassification);
+          
+          result = {
+            type: 'drums',
+            url: urlData.publicUrl,
+            classification: drumClassification
+          };
           break;
           
         case 'instrumentation':
@@ -156,10 +146,9 @@ serve(async (req) => {
             }
           });
           
-          const instrArrayBuffer = await instrResponse.arrayBuffer();
           result = {
-            audioContent: arrayBufferToBase64(instrArrayBuffer),
-            type: 'instrumentation'
+            type: 'instrumentation',
+            url: urlData.publicUrl
           };
           break;
           
