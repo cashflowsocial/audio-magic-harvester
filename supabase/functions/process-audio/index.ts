@@ -96,14 +96,26 @@ serve(async (req) => {
           break;
           
         case 'drums':
-          // Using Demucs model for drums extraction
-          result = await hf.audioToAudio({
+          // First separate drums using Demucs
+          const drumSeparation = await hf.audioToAudio({
             model: 'facebook/demucs',
             data: audioBlob,
             parameters: {
-              target: 'drums'  // Extract the drums part
+              target: 'drums'
             }
           });
+          
+          // Then classify drum types using AudioSet model
+          const drumClassification = await hf.audioClassification({
+            model: 'antonibigata/drummids', // Specialized drum classification model
+            data: drumSeparation
+          });
+          
+          // Combine the results
+          result = {
+            audioData: drumSeparation,
+            classification: drumClassification
+          };
           break;
           
         case 'instrumentation':
@@ -129,7 +141,7 @@ serve(async (req) => {
         .update({
           processing_status: 'completed',
           melody_file_path: processingType === 'melody' ? result : null,
-          drums_file_path: processingType === 'drums' ? result : null,
+          drums_file_path: processingType === 'drums' ? JSON.stringify(result) : null,
           combined_file_path: urlData.publicUrl
         })
         .eq('id', processedTrack.id);
