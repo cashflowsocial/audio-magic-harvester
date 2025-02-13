@@ -35,14 +35,17 @@ export const saveToStorage = async (audioBlob: Blob) => {
 
     if (dbError) throw dbError;
 
-    // Trigger AI processing
+    // Get the public URL before triggering processing
     const audioUrl = await getRecordingUrl(filename);
-    const { data: processingResult, error: processError } = await supabase.functions.invoke('process-audio', {
-      body: {
-        recordingId: recording.id,
-        audioUrl: audioUrl
-      }
-    });
+
+    // Trigger AI processing with properly structured data
+    const { data: processingResult, error: processError } = await supabase.functions
+      .invoke('process-audio', {
+        body: JSON.stringify({
+          recordingId: recording.id,
+          audioUrl: audioUrl
+        })
+      });
 
     if (processError) {
       console.error('Error triggering audio processing:', processError);
