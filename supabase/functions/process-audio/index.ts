@@ -81,11 +81,45 @@ serve(async (req) => {
     console.log('Starting AI processing...');
 
     try {
-      // Using MIT-licensed model for audio classification
-      const result = await hf.audioClassification({
-        model: 'mit/ast-finetuned-audioset-10-10-0.4593', // Public model with MIT license
-        data: audioBlob
-      });
+      let result;
+      
+      switch (processingType) {
+        case 'melody':
+          // Using Demucs model for melody extraction
+          result = await hf.audioToAudio({
+            model: 'facebook/demucs',  // Source separation model
+            data: audioBlob,
+            parameters: {
+              target: 'vocals'  // Extract the vocal/melody part
+            }
+          });
+          break;
+          
+        case 'drums':
+          // Using Demucs model for drums extraction
+          result = await hf.audioToAudio({
+            model: 'facebook/demucs',
+            data: audioBlob,
+            parameters: {
+              target: 'drums'  // Extract the drums part
+            }
+          });
+          break;
+          
+        case 'instrumentation':
+          // Using Demucs model for full instrumental separation
+          result = await hf.audioToAudio({
+            model: 'facebook/demucs',
+            data: audioBlob,
+            parameters: {
+              target: 'other'  // Extract the instrumental part
+            }
+          });
+          break;
+          
+        default:
+          throw new Error(`Unknown processing type: ${processingType}`);
+      }
 
       console.log('AI processing completed:', result);
 
@@ -94,8 +128,8 @@ serve(async (req) => {
         .from('processed_tracks')
         .update({
           processing_status: 'completed',
-          melody_file_path: urlData.publicUrl, // For now, just store the original URL
-          drums_file_path: urlData.publicUrl,
+          melody_file_path: processingType === 'melody' ? result : null,
+          drums_file_path: processingType === 'drums' ? result : null,
           combined_file_path: urlData.publicUrl
         })
         .eq('id', processedTrack.id);
