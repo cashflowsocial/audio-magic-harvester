@@ -22,9 +22,6 @@ serve(async (req) => {
       throw new Error('Hugging Face API key not configured');
     }
 
-    // Initialize Hugging Face client
-    const hf = new HfInference(hfApiKey);
-
     // Initialize Supabase client
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -49,38 +46,60 @@ serve(async (req) => {
 
     // Fetch the audio file
     console.log('Fetching audio file from URL:', audioUrl);
-    const audioResponse = await fetch(audioUrl);
+    const audioResponse = await fetch(audioUrl, {
+      headers: {
+        'Accept': '*/*',
+      }
+    });
+    
     if (!audioResponse.ok) {
       throw new Error('Failed to fetch audio file');
     }
+    
     const audioBlob = await audioResponse.blob();
 
-    // Process audio with Hugging Face models
+    // Initialize Hugging Face client
+    const hf = new HfInference(hfApiKey);
+
     console.log('Starting AI processing...');
 
     try {
-      // Use Hugging Face's Demucs model for source separation
-      const separationResult = await hf.audioClassification({
-        model: 'facebook/demucs',
+      // Use audio classification as a simpler test
+      const result = await hf.audioClassification({
+        model: 'facebook/wav2vec2-base-960h',
         data: audioBlob
       });
 
-      console.log('AI processing completed:', separationResult);
+      console.log('AI processing completed:', result);
 
       // Update the processed track with results
       const { error: updateError } = await supabaseClient
         .from('processed_tracks')
         .update({
           processing_status: 'completed',
-          melody_file_path: audioUrl, // TODO: Store separated melody track
-          drums_file_path: audioUrl,  // TODO: Store separated drums track
-          combined_file_path: audioUrl // TODO: Store combined track
+          melody_file_path: audioUrl, // For now, just store the original URL
+          drums_file_path: audioUrl,
+          combined_file_path: audioUrl
         })
         .eq('id', processedTrack.id);
 
       if (updateError) {
         throw new Error(`Error updating processed track: ${updateError.message}`);
       }
+
+      return new Response(
+        JSON.stringify({ 
+          message: 'Audio processing completed',
+          processedTrackId: processedTrack.id
+        }),
+        { 
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
     } catch (processingError) {
       console.error('AI processing error:', processingError);
       
@@ -95,18 +114,6 @@ serve(async (req) => {
       throw processingError;
     }
 
-    return new Response(
-      JSON.stringify({ 
-        message: 'Audio processing completed',
-        processedTrackId: processedTrack.id
-      }),
-      { 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
   } catch (error) {
     console.error('Error processing audio:', error);
     return new Response(
