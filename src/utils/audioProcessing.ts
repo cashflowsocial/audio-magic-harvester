@@ -1,8 +1,15 @@
 
 import { HfInference } from '@huggingface/inference';
+import { createClient } from '@supabase/supabase-js';
 
 // Initialize the Hugging Face inference client
 const inference = new HfInference();
+
+// Initialize Supabase client
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 export const processAudio = async (audioBlob: Blob) => {
   try {
@@ -15,24 +22,31 @@ export const processAudio = async (audioBlob: Blob) => {
   }
 };
 
-export const saveToLocalStorage = (audioBlob: Blob) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      try {
-        const recordings = JSON.parse(localStorage.getItem('recordings') || '[]');
-        recordings.push({
-          id: Date.now(),
-          data: reader.result,
-          timestamp: new Date().toISOString(),
-        });
-        localStorage.setItem('recordings', JSON.stringify(recordings));
-        resolve(true);
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(audioBlob);
-  });
+export const saveToStorage = async (audioBlob: Blob) => {
+  try {
+    const filename = `recording-${Date.now()}.wav`;
+    
+    // Upload the audio file to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('recordings')
+      .upload(filename, audioBlob);
+
+    if (error) throw error;
+
+    // Store the metadata in the database
+    const { error: dbError } = await supabase
+      .from('recordings')
+      .insert({
+        filename: filename,
+        storage_path: data.path,
+        timestamp: new Date().toISOString(),
+      });
+
+    if (dbError) throw dbError;
+
+    return true;
+  } catch (error) {
+    console.error('Error saving to Supabase:', error);
+    throw error;
+  }
 };
