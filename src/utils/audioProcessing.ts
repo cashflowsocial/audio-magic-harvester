@@ -38,9 +38,17 @@ export const saveToStorage = async (audioBlob: Blob) => {
 
     if (dbError) throw dbError;
 
-    return true;
+    return filename;
   } catch (error) {
     console.error('Error saving to Supabase:', error);
     throw error;
   }
+};
+
+export const getRecordingUrl = async (filename: string) => {
+  const { data } = await supabase.storage
+    .from('recordings')
+    .getPublicUrl(filename);
+  
+  return data.publicUrl;
 };

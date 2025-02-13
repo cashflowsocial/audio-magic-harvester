@@ -1,14 +1,17 @@
 
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, Loader2 } from "lucide-react";
+import { Mic, Square, Loader2, Play, Pause } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { saveToStorage, processAudio } from "@/utils/audioProcessing";
+import { saveToStorage, processAudio, getRecordingUrl } from "@/utils/audioProcessing";
 
 const Index = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentRecording, setCurrentRecording] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const { toast } = useToast();
 
@@ -33,7 +36,9 @@ const Index = () => {
           // Process the audio using Hugging Face
           const processedAudio = await processAudio(audioBlob);
           // Save to Supabase storage
-          await saveToStorage(processedAudio);
+          const filename = await saveToStorage(processedAudio);
+          const url = await getRecordingUrl(filename);
+          setCurrentRecording(url);
           toast({
             title: "Success",
             description: "Audio recorded and saved successfully!",
@@ -70,6 +75,17 @@ const Index = () => {
     }
   };
 
+  const togglePlayback = () => {
+    if (!audioPlayerRef.current || !currentRecording) return;
+
+    if (isPlaying) {
+      audioPlayerRef.current.pause();
+    } else {
+      audioPlayerRef.current.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
       <div className="bg-white rounded-lg shadow-md p-8 w-full max-w-md">
@@ -94,6 +110,29 @@ const Index = () => {
           <p className="text-sm text-gray-500">
             {isProcessing ? 'Processing...' : isRecording ? 'Recording... Click to stop' : 'Click to start recording'}
           </p>
+
+          {currentRecording && (
+            <div className="mt-4 flex flex-col items-center gap-2">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-16 h-16 rounded-full"
+                onClick={togglePlayback}
+              >
+                {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+              </Button>
+              <p className="text-sm text-gray-500">
+                {isPlaying ? 'Playing...' : 'Click to play'}
+              </p>
+              <audio
+                ref={audioPlayerRef}
+                src={currentRecording}
+                onEnded={() => setIsPlaying(false)}
+                onPause={() => setIsPlaying(false)}
+                onPlay={() => setIsPlaying(true)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>
