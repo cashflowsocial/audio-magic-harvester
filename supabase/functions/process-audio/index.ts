@@ -65,23 +65,7 @@ serve(async (req) => {
       throw new Error(`Error creating processed track: ${insertError.message}`);
     }
 
-    // Fetch the audio file
-    console.log('Fetching audio file from URL:', urlData.publicUrl);
-    const audioResponse = await fetch(urlData.publicUrl, {
-      headers: {
-        'Accept': 'audio/*'
-      }
-    });
-    
-    if (!audioResponse.ok) {
-      throw new Error('Failed to fetch audio file');
-    }
-    
-    // Get audio data as ArrayBuffer
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/wav' });
-
-    // Initialize Hugging Face client with specific headers
+    // Initialize Hugging Face client
     const hf = new HfInference(hfApiKey);
 
     console.log('Starting AI processing...');
@@ -91,15 +75,15 @@ serve(async (req) => {
       
       switch (processingType) {
         case 'melody':
-          const melodyResponse = await hf.audioToAudio({
+          console.log('Processing melody...');
+          await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: audioBlob,
+            data: urlData.publicUrl,
             parameters: {
               target: 'vocals'
             }
           });
           
-          // Store the result directly as a URL
           result = {
             type: 'melody',
             url: urlData.publicUrl
@@ -108,9 +92,9 @@ serve(async (req) => {
           
         case 'drums':
           console.log('Starting drum separation...');
-          const drumResponse = await hf.audioToAudio({
+          await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: audioBlob,
+            data: urlData.publicUrl,
             parameters: {
               target: 'drums'
             }
@@ -118,14 +102,10 @@ serve(async (req) => {
           
           console.log('Drum separation completed');
           
-          // Create a new blob for classification
-          const drumArrayBuffer = await drumResponse.arrayBuffer();
-          const drumBlob = new Blob([drumArrayBuffer], { type: 'audio/wav' });
-          
           console.log('Classifying drum patterns...');
           const drumClassification = await hf.audioClassification({
             model: 'antonibigata/drummids',
-            data: drumBlob
+            data: urlData.publicUrl
           });
           
           console.log('Drum classification completed:', drumClassification);
@@ -138,9 +118,10 @@ serve(async (req) => {
           break;
           
         case 'instrumentation':
-          const instrResponse = await hf.audioToAudio({
+          console.log('Processing instrumentation...');
+          await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: audioBlob,
+            data: urlData.publicUrl,
             parameters: {
               target: 'other'
             }
