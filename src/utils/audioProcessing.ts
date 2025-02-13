@@ -40,7 +40,8 @@ export const saveToStorage = async (audioBlob: Blob) => {
     
     return {
       filename,
-      url: audioUrl
+      url: audioUrl,
+      id: recording.id
     };
   } catch (error) {
     console.error('Error saving to Supabase:', error);
@@ -55,4 +56,3 @@ export const getRecordingUrl = async (filename: string) => {
   
   return data.publicUrl;
 };
-

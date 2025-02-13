@@ -17,6 +17,7 @@ export type Database = {
           id: string
           melody_file_path: string | null
           processing_status: string | null
+          processing_type: Database["public"]["Enums"]["processing_type"] | null
           recording_id: string | null
           updated_at: string | null
           version: number | null
@@ -28,6 +29,9 @@ export type Database = {
           id?: string
           melody_file_path?: string | null
           processing_status?: string | null
+          processing_type?:
+            | Database["public"]["Enums"]["processing_type"]
+            | null
           recording_id?: string | null
           updated_at?: string | null
           version?: number | null
@@ -39,6 +43,9 @@ export type Database = {
           id?: string
           melody_file_path?: string | null
           processing_status?: string | null
+          processing_type?:
+            | Database["public"]["Enums"]["processing_type"]
+            | null
           recording_id?: string | null
           updated_at?: string | null
           version?: number | null
@@ -97,6 +104,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      processing_type: "drums" | "melody" | "instrumentation"
       recording_status: "pending" | "processing" | "completed" | "failed"
     }
     CompositeTypes: {

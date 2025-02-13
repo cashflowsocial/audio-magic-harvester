@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AudioLevel } from "@/components/audio/AudioLevel";
 import { RecordButton } from "@/components/audio/RecordButton";
 import { PlaybackControl } from "@/components/audio/PlaybackControl";
+import { ExtractButtons } from "@/components/audio/ExtractButtons";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 
 const Index = () => {
@@ -12,6 +13,7 @@ const Index = () => {
     isProcessing,
     audioLevel,
     currentRecording,
+    currentRecordingId,
     startRecording,
     stopRecording,
   } = useAudioRecorder();
@@ -35,13 +37,20 @@ const Index = () => {
           />
           
           {currentRecording && !isRecording && (
-            <div className="w-full">
-              <PlaybackControl
-                audioUrl={currentRecording}
-                isPlaying={isPlaying}
-                onPlayingChange={setIsPlaying}
+            <>
+              <div className="w-full">
+                <PlaybackControl
+                  audioUrl={currentRecording}
+                  isPlaying={isPlaying}
+                  onPlayingChange={setIsPlaying}
+                />
+              </div>
+              
+              <ExtractButtons
+                recordingId={currentRecordingId}
+                disabled={isProcessing || isRecording || isPlaying}
               />
-            </div>
+            </>
           )}
         </div>
       </div>

@@ -8,6 +8,7 @@ export const useAudioRecorder = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
   const [currentRecording, setCurrentRecording] = useState<string | null>(null);
+  const [currentRecordingId, setCurrentRecordingId] = useState<string | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -69,6 +70,7 @@ export const useAudioRecorder = () => {
           const processedAudio = await processAudio(audioBlob);
           const result = await saveToStorage(processedAudio);
           setCurrentRecording(result.url);
+          setCurrentRecordingId(result.id);
           
           toast({
             title: "Success",
@@ -117,6 +119,7 @@ export const useAudioRecorder = () => {
     isProcessing,
     audioLevel,
     currentRecording,
+    currentRecordingId,
     startRecording,
     stopRecording,
   };
