@@ -6,20 +6,25 @@ import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json'
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     const { recordingId, processingType } = await req.json();
-    const hfApiKey = Deno.env.get('HUGGING_FACE_API_KEY');
+    console.log('Received request:', { recordingId, processingType });
     
+    const hfApiKey = Deno.env.get('HUGGING_FACE_API_KEY');
     if (!hfApiKey) {
-      throw new Error('Hugging Face API key not configured');
+      return new Response(
+        JSON.stringify({ error: 'Hugging Face API key not configured' }), 
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     // Initialize Supabase client
@@ -28,8 +33,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    console.log('Processing audio for recording:', recordingId);
-    
     // First get the recording details
     const { data: recording, error: fetchError } = await supabaseClient
       .from('recordings')
@@ -38,7 +41,10 @@ serve(async (req) => {
       .single();
 
     if (fetchError || !recording) {
-      throw new Error('Recording not found');
+      return new Response(
+        JSON.stringify({ error: 'Recording not found' }), 
+        { status: 404, headers: corsHeaders }
+      );
     }
 
     // Get the audio URL
@@ -47,7 +53,10 @@ serve(async (req) => {
       .getPublicUrl(recording.filename);
 
     if (!urlData.publicUrl) {
-      throw new Error('Could not get recording URL');
+      return new Response(
+        JSON.stringify({ error: 'Could not get recording URL' }), 
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     // Create a processed track record
@@ -62,20 +71,20 @@ serve(async (req) => {
       .single();
 
     if (insertError) {
-      throw new Error(`Error creating processed track: ${insertError.message}`);
+      return new Response(
+        JSON.stringify({ error: `Error creating processed track: ${insertError.message}` }), 
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     // Initialize Hugging Face client
     const hf = new HfInference(hfApiKey);
-
-    console.log('Starting AI processing...');
 
     try {
       let result;
       
       switch (processingType) {
         case 'melody':
-          console.log('Processing melody...');
           await hf.audioToAudio({
             model: 'facebook/demucs',
             data: urlData.publicUrl,
@@ -91,7 +100,6 @@ serve(async (req) => {
           break;
           
         case 'drums':
-          console.log('Starting drum separation...');
           await hf.audioToAudio({
             model: 'facebook/demucs',
             data: urlData.publicUrl,
@@ -100,15 +108,10 @@ serve(async (req) => {
             }
           });
           
-          console.log('Drum separation completed');
-          
-          console.log('Classifying drum patterns...');
           const drumClassification = await hf.audioClassification({
             model: 'antonibigata/drummids',
             data: urlData.publicUrl
           });
-          
-          console.log('Drum classification completed:', drumClassification);
           
           result = {
             type: 'drums',
@@ -118,7 +121,6 @@ serve(async (req) => {
           break;
           
         case 'instrumentation':
-          console.log('Processing instrumentation...');
           await hf.audioToAudio({
             model: 'facebook/demucs',
             data: urlData.publicUrl,
@@ -134,10 +136,11 @@ serve(async (req) => {
           break;
           
         default:
-          throw new Error(`Unknown processing type: ${processingType}`);
+          return new Response(
+            JSON.stringify({ error: `Unknown processing type: ${processingType}` }), 
+            { status: 400, headers: corsHeaders }
+          );
       }
-
-      console.log('AI processing completed successfully');
 
       // Update the processed track with results
       const { error: updateError } = await supabaseClient
@@ -151,7 +154,10 @@ serve(async (req) => {
         .eq('id', processedTrack.id);
 
       if (updateError) {
-        throw new Error(`Error updating processed track: ${updateError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Error updating processed track: ${updateError.message}` }), 
+          { status: 500, headers: corsHeaders }
+        );
       }
 
       return new Response(
@@ -160,17 +166,10 @@ serve(async (req) => {
           processedTrackId: processedTrack.id,
           result
         }),
-        { 
-          headers: { 
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          }
-        }
+        { headers: corsHeaders }
       );
 
     } catch (processingError) {
-      console.error('AI processing error:', processingError);
-      
       // Update status to failed
       await supabaseClient
         .from('processed_tracks')
@@ -180,20 +179,16 @@ serve(async (req) => {
         })
         .eq('id', processedTrack.id);
         
-      throw processingError;
+      return new Response(
+        JSON.stringify({ error: processingError.message }), 
+        { status: 500, headers: corsHeaders }
+      );
     }
 
   } catch (error) {
-    console.error('Error processing audio:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ error: error.message }), 
+      { status: 500, headers: corsHeaders }
     );
   }
 });
