@@ -21,19 +21,34 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     });
 
     try {
-      const { data, error } = await supabase.functions.invoke('process-audio', {
-        body: JSON.stringify({ 
-          recordingId, 
-          processingType: type 
-        })
-      });
+      // Use fetch directly instead of supabase.functions.invoke
+      const response = await fetch(
+        `${supabase.functions.url}/process-audio`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabase.auth.getSession()?.access_token}`,
+          },
+          body: JSON.stringify({ 
+            recordingId, 
+            processingType: type 
+          })
+        }
+      );
 
-      if (error) throw error;
+      if (!response.ok) {
+        throw new Error(`Processing failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
 
       toast({
         title: "Processing Complete",
         description: `Successfully extracted ${type}!`,
       });
+
+      return data;
     } catch (error) {
       console.error(`Error extracting ${type}:`, error);
       toast({
