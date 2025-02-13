@@ -28,12 +28,19 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
         body: { 
           recordingId, 
           processingType: type 
+        },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`
         }
       });
 
       if (response.error) {
-        throw response.error;
+        console.error(`Processing error:`, response.error);
+        throw new Error(response.error.message || 'Processing failed');
       }
+
+      console.log(`Processing response:`, response);
 
       toast({
         title: "Processing Complete",
@@ -46,7 +53,7 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       toast({
         variant: "destructive",
         title: "Processing Failed",
-        description: `Failed to extract ${type}. Please try again.`,
+        description: error instanceof Error ? error.message : `Failed to extract ${type}. Please try again.`,
       });
     }
   };
