@@ -67,11 +67,7 @@ serve(async (req) => {
 
     // Fetch the audio file
     console.log('Fetching audio file from URL:', urlData.publicUrl);
-    const audioResponse = await fetch(urlData.publicUrl, {
-      headers: {
-        'Accept': '*/*',
-      }
-    });
+    const audioResponse = await fetch(urlData.publicUrl);
     
     if (!audioResponse.ok) {
       throw new Error('Failed to fetch audio file');
