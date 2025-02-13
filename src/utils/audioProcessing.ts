@@ -2,13 +2,8 @@
 import { HfInference } from '@huggingface/inference';
 import { supabase } from "@/integrations/supabase/client";
 
-// Initialize the Hugging Face inference client
-const inference = new HfInference();
-
 export const processAudio = async (audioBlob: Blob) => {
   try {
-    // For MVP, we'll just return the original audio
-    // TODO: Implement AI processing once we have the API key configured
     return audioBlob;
   } catch (error) {
     console.error('Error processing audio:', error);
@@ -42,7 +37,7 @@ export const saveToStorage = async (audioBlob: Blob) => {
 
     // Trigger AI processing
     const audioUrl = await getRecordingUrl(filename);
-    const { error: processError } = await supabase.functions.invoke('process-audio', {
+    const { data: processingResult, error: processError } = await supabase.functions.invoke('process-audio', {
       body: {
         recordingId: recording.id,
         audioUrl: audioUrl
@@ -51,9 +46,13 @@ export const saveToStorage = async (audioBlob: Blob) => {
 
     if (processError) {
       console.error('Error triggering audio processing:', processError);
+      throw processError;
     }
 
-    return filename;
+    return {
+      filename,
+      processedTrackId: processingResult.processedTrackId
+    };
   } catch (error) {
     console.error('Error saving to Supabase:', error);
     throw error;
@@ -66,4 +65,15 @@ export const getRecordingUrl = async (filename: string) => {
     .getPublicUrl(filename);
   
   return data.publicUrl;
+};
+
+export const checkProcessingStatus = async (processedTrackId: string) => {
+  const { data, error } = await supabase
+    .from('processed_tracks')
+    .select('*')
+    .eq('id', processedTrackId)
+    .single();
+
+  if (error) throw error;
+  return data;
 };

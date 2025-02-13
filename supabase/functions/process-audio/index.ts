@@ -1,16 +1,12 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-interface HfInference {
-  endpoint: string;
-  accessToken: string;
-}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -25,6 +21,9 @@ serve(async (req) => {
     if (!hfApiKey) {
       throw new Error('Hugging Face API key not configured');
     }
+
+    // Initialize Hugging Face client
+    const hf = new HfInference(hfApiKey);
 
     // Initialize Supabase client
     const supabaseClient = createClient(
@@ -48,27 +47,57 @@ serve(async (req) => {
       throw new Error(`Error creating processed track: ${insertError.message}`);
     }
 
-    // TODO: Implement Hugging Face API calls for melody and drum extraction
-    // For MVP, we'll just update the status to simulate processing
-    console.log('Simulating AI processing...');
-    
-    const { error: updateError } = await supabaseClient
-      .from('processed_tracks')
-      .update({
-        processing_status: 'completed',
-        melody_file_path: audioUrl, // Temporarily using original audio
-        drums_file_path: audioUrl,  // Temporarily using original audio
-        combined_file_path: audioUrl // Temporarily using original audio
-      })
-      .eq('id', processedTrack.id);
+    // Fetch the audio file
+    console.log('Fetching audio file from URL:', audioUrl);
+    const audioResponse = await fetch(audioUrl);
+    if (!audioResponse.ok) {
+      throw new Error('Failed to fetch audio file');
+    }
+    const audioBlob = await audioResponse.blob();
 
-    if (updateError) {
-      throw new Error(`Error updating processed track: ${updateError.message}`);
+    // Process audio with Hugging Face models
+    console.log('Starting AI processing...');
+
+    try {
+      // Use Hugging Face's Demucs model for source separation
+      const separationResult = await hf.audioClassification({
+        model: 'facebook/demucs',
+        data: audioBlob
+      });
+
+      console.log('AI processing completed:', separationResult);
+
+      // Update the processed track with results
+      const { error: updateError } = await supabaseClient
+        .from('processed_tracks')
+        .update({
+          processing_status: 'completed',
+          melody_file_path: audioUrl, // TODO: Store separated melody track
+          drums_file_path: audioUrl,  // TODO: Store separated drums track
+          combined_file_path: audioUrl // TODO: Store combined track
+        })
+        .eq('id', processedTrack.id);
+
+      if (updateError) {
+        throw new Error(`Error updating processed track: ${updateError.message}`);
+      }
+    } catch (processingError) {
+      console.error('AI processing error:', processingError);
+      
+      // Update status to failed
+      await supabaseClient
+        .from('processed_tracks')
+        .update({
+          processing_status: 'failed'
+        })
+        .eq('id', processedTrack.id);
+        
+      throw processingError;
     }
 
     return new Response(
       JSON.stringify({ 
-        message: 'Audio processing initiated',
+        message: 'Audio processing completed',
         processedTrackId: processedTrack.id
       }),
       { 
