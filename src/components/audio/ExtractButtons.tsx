@@ -22,7 +22,10 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
 
     try {
       const { data, error } = await supabase.functions.invoke('process-audio', {
-        body: { recordingId, processingType: type }
+        body: JSON.stringify({ 
+          recordingId, 
+          processingType: type 
+        })
       });
 
       if (error) throw error;
