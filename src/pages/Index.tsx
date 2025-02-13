@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, Square, Loader2, Play, Pause } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { saveToStorage, processAudio, getRecordingUrl } from "@/utils/audioProcessing";
+import { saveToStorage, processAudio, getRecordingUrl, checkProcessingStatus } from "@/utils/audioProcessing";
 
 const Index = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -79,13 +79,32 @@ const Index = () => {
         
         try {
           const processedAudio = await processAudio(audioBlob);
-          const filename = await saveToStorage(processedAudio);
-          const url = await getRecordingUrl(filename);
+          const result = await saveToStorage(processedAudio);
+          const url = await getRecordingUrl(result.filename);
           setCurrentRecording(url);
-          toast({
-            title: "Success",
-            description: "Audio recorded and saved successfully!",
-          });
+          
+          // Start polling for processing status
+          const checkStatus = async () => {
+            const status = await checkProcessingStatus(result.processedTrackId);
+            if (status.processing_status === 'completed') {
+              toast({
+                title: "Success",
+                description: "Audio processed successfully!",
+              });
+            } else if (status.processing_status === 'failed') {
+              toast({
+                title: "Error",
+                description: "Failed to process the recording.",
+                variant: "destructive",
+              });
+            } else {
+              // If still processing, check again in 2 seconds
+              setTimeout(checkStatus, 2000);
+            }
+          };
+          
+          checkStatus();
+          
         } catch (error) {
           console.error('Error processing/saving audio:', error);
           toast({
