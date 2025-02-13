@@ -4,14 +4,14 @@ import { supabase } from "@/integrations/supabase/client"
 import { PlaybackControl } from "@/components/audio/PlaybackControl"
 import { useState } from "react"
 import { ExtractButtons } from "@/components/audio/ExtractButtons"
-import { getRecordingUrl } from "@/utils/audioProcessing"
+import { getRecordingUrl, type RecordingWithUrl } from "@/utils/audioProcessing"
 import { NavMenu } from "@/components/NavMenu"
 
 const Recordings = () => {
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
 
-  const { data: recordings, isLoading } = useQuery({
+  const { data: recordings, isLoading } = useQuery<RecordingWithUrl[]>({
     queryKey: ['recordings'],
     queryFn: async () => {
       const { data, error } = await supabase

@@ -1,5 +1,9 @@
 
 import { supabase } from "@/integrations/supabase/client";
+import { Database } from "@/integrations/supabase/types";
+
+type Recording = Database['public']['Tables']['recordings']['Row'];
+type RecordingWithUrl = Recording & { url: string };
 
 export const processAudio = async (audioBlob: Blob) => {
   try {
@@ -56,3 +60,5 @@ export const getRecordingUrl = async (filename: string) => {
   
   return data.publicUrl;
 };
+
+export type { RecordingWithUrl };
