@@ -10,16 +10,26 @@ export const processAudio = async (
 ): Promise<ProcessingResult> => {
   console.log(`Processing ${processingType} extraction...`);
   
+  // Ensure proper headers for HF API calls
+  const requestOptions = {
+    headers: {
+      'Accept': 'audio/wav, audio/*, */*',
+      'Content-Type': 'audio/wav'
+    }
+  };
+  
   switch (processingType) {
     case 'melody':
-      await hf.audioToAudio({
+      console.log('Starting melody extraction...');
+      const melodyResult = await hf.audioToAudio({
         model: 'facebook/demucs',
         data: audioBlob,
         parameters: {
           target: 'vocals'
         }
-      });
+      }, requestOptions);
       
+      console.log('Melody extraction completed');
       return {
         type: 'melody',
         url: publicUrl,
@@ -27,19 +37,22 @@ export const processAudio = async (
       };
       
     case 'drums':
-      await hf.audioToAudio({
+      console.log('Starting drums extraction...');
+      const drumsResult = await hf.audioToAudio({
         model: 'facebook/demucs',
         data: audioBlob,
         parameters: {
           target: 'drums'
         }
-      });
+      }, requestOptions);
       
+      console.log('Starting drum classification...');
       const drumClassification = await hf.audioClassification({
         model: 'antonibigata/drummids',
         data: audioBlob
-      });
+      }, requestOptions);
       
+      console.log('Drums processing completed');
       return {
         type: 'drums',
         url: publicUrl,
@@ -48,14 +61,16 @@ export const processAudio = async (
       };
       
     case 'instrumentation':
-      await hf.audioToAudio({
+      console.log('Starting instrumentation extraction...');
+      const instrumentResult = await hf.audioToAudio({
         model: 'facebook/demucs',
         data: audioBlob,
         parameters: {
           target: 'other'
         }
-      });
+      }, requestOptions);
       
+      console.log('Instrumentation extraction completed');
       return {
         type: 'instrumentation',
         url: publicUrl,
