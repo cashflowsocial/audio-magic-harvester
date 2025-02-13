@@ -96,26 +96,39 @@ serve(async (req) => {
           break;
           
         case 'drums':
-          // First separate drums using Demucs
-          const drumSeparation = await hf.audioToAudio({
-            model: 'facebook/demucs',
-            data: audioBlob,
-            parameters: {
-              target: 'drums'
-            }
-          });
-          
-          // Then classify drum types using AudioSet model
-          const drumClassification = await hf.audioClassification({
-            model: 'antonibigata/drummids', // Specialized drum classification model
-            data: drumSeparation
-          });
-          
-          // Combine the results
-          result = {
-            audioData: drumSeparation,
-            classification: drumClassification
-          };
+          try {
+            // First separate drums using Demucs
+            console.log('Starting drum separation...');
+            const drumSeparation = await hf.audioToAudio({
+              model: 'facebook/demucs',
+              data: audioBlob,
+              parameters: {
+                target: 'drums'
+              }
+            });
+            
+            console.log('Drum separation completed, starting classification...');
+            
+            // Convert AudioData to Blob for classification
+            const drumBlob = new Blob([drumSeparation], { type: 'audio/wav' });
+            
+            // Then classify drum types
+            const drumClassification = await hf.audioClassification({
+              model: 'antonibigata/drummids',
+              data: drumBlob
+            });
+            
+            console.log('Drum classification completed:', drumClassification);
+            
+            // Combine the results
+            result = {
+              audioData: drumSeparation,
+              classification: drumClassification
+            };
+          } catch (drumError) {
+            console.error('Error in drum processing:', drumError);
+            throw drumError;
+          }
           break;
           
         case 'instrumentation':
