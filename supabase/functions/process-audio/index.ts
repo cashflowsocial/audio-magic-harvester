@@ -15,7 +15,7 @@ serve(async (req) => {
   }
 
   try {
-    const { recordingId, audioUrl } = await req.json();
+    const { recordingId, processingType } = await req.json();
     const hfApiKey = Deno.env.get('HUGGING_FACE_API_KEY');
     
     if (!hfApiKey) {
@@ -30,11 +30,32 @@ serve(async (req) => {
 
     console.log('Processing audio for recording:', recordingId);
     
+    // First get the recording details
+    const { data: recording, error: fetchError } = await supabaseClient
+      .from('recordings')
+      .select('*')
+      .eq('id', recordingId)
+      .single();
+
+    if (fetchError || !recording) {
+      throw new Error('Recording not found');
+    }
+
+    // Get the audio URL
+    const { data: urlData } = await supabaseClient.storage
+      .from('recordings')
+      .getPublicUrl(recording.filename);
+
+    if (!urlData.publicUrl) {
+      throw new Error('Could not get recording URL');
+    }
+
     // Create a processed track record
     const { data: processedTrack, error: insertError } = await supabaseClient
       .from('processed_tracks')
       .insert({
         recording_id: recordingId,
+        processing_type: processingType,
         processing_status: 'processing'
       })
       .select()
@@ -45,8 +66,8 @@ serve(async (req) => {
     }
 
     // Fetch the audio file
-    console.log('Fetching audio file from URL:', audioUrl);
-    const audioResponse = await fetch(audioUrl, {
+    console.log('Fetching audio file from URL:', urlData.publicUrl);
+    const audioResponse = await fetch(urlData.publicUrl, {
       headers: {
         'Accept': '*/*',
       }
@@ -77,9 +98,9 @@ serve(async (req) => {
         .from('processed_tracks')
         .update({
           processing_status: 'completed',
-          melody_file_path: audioUrl, // For now, just store the original URL
-          drums_file_path: audioUrl,
-          combined_file_path: audioUrl
+          melody_file_path: urlData.publicUrl, // For now, just store the original URL
+          drums_file_path: urlData.publicUrl,
+          combined_file_path: urlData.publicUrl
         })
         .eq('id', processedTrack.id);
 
