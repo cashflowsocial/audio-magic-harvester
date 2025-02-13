@@ -85,21 +85,25 @@ serve(async (req) => {
       
       switch (processingType) {
         case 'melody':
-          // Using Demucs model for melody extraction
-          result = await hf.audioToAudio({
+          const melodyResponse = await hf.audioToAudio({
             model: 'facebook/demucs',
             data: audioBlob,
             parameters: {
               target: 'vocals'
             }
           });
+          
+          const melodyArrayBuffer = await melodyResponse.arrayBuffer();
+          result = {
+            audioData: Array.from(new Uint8Array(melodyArrayBuffer)),
+            type: 'melody'
+          };
           break;
           
         case 'drums':
           try {
             console.log('Starting drum separation...');
-            // First separate drums using Demucs
-            const drumResult = await hf.audioToAudio({
+            const drumResponse = await hf.audioToAudio({
               model: 'facebook/demucs',
               data: audioBlob,
               parameters: {
@@ -107,27 +111,27 @@ serve(async (req) => {
               }
             });
             
-            console.log('Drum separation completed, starting classification...');
+            console.log('Drum separation completed');
             
-            // Store the drum audio data
-            const drumArrayBuffer = await drumResult.arrayBuffer();
-            const drumUint8Array = new Uint8Array(drumArrayBuffer);
+            // Convert binary data to array for safe JSON serialization
+            const drumArrayBuffer = await drumResponse.arrayBuffer();
+            const drumArray = Array.from(new Uint8Array(drumArrayBuffer));
             
-            // Create a new blob with the correct audio type
-            const drumBlob = new Blob([drumUint8Array], { type: 'audio/wav' });
+            // Create a temporary blob for classification
+            const tempDrumBlob = new Blob([new Uint8Array(drumArrayBuffer)], { type: 'audio/wav' });
             
             console.log('Classifying drum patterns...');
             const drumClassification = await hf.audioClassification({
               model: 'antonibigata/drummids',
-              data: drumBlob
+              data: tempDrumBlob
             });
             
             console.log('Drum classification completed:', drumClassification);
             
-            // Store both the audio data and classification
             result = {
-              audioData: drumUint8Array,
-              classification: drumClassification
+              audioData: drumArray,
+              classification: drumClassification,
+              type: 'drums'
             };
           } catch (drumError) {
             console.error('Error in drum processing:', drumError);
@@ -136,27 +140,33 @@ serve(async (req) => {
           break;
           
         case 'instrumentation':
-          result = await hf.audioToAudio({
+          const instrResponse = await hf.audioToAudio({
             model: 'facebook/demucs',
             data: audioBlob,
             parameters: {
               target: 'other'
             }
           });
+          
+          const instrArrayBuffer = await instrResponse.arrayBuffer();
+          result = {
+            audioData: Array.from(new Uint8Array(instrArrayBuffer)),
+            type: 'instrumentation'
+          };
           break;
           
         default:
           throw new Error(`Unknown processing type: ${processingType}`);
       }
 
-      console.log('AI processing completed');
+      console.log('AI processing completed successfully');
 
       // Update the processed track with results
       const { error: updateError } = await supabaseClient
         .from('processed_tracks')
         .update({
           processing_status: 'completed',
-          melody_file_path: processingType === 'melody' ? result : null,
+          melody_file_path: processingType === 'melody' ? JSON.stringify(result) : null,
           drums_file_path: processingType === 'drums' ? JSON.stringify(result) : null,
           combined_file_path: urlData.publicUrl
         })
