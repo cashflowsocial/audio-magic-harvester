@@ -26,10 +26,16 @@ serve(async (req: Request) => {
       );
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client with proper headers
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
     );
 
     // Get the recording details
@@ -58,13 +64,20 @@ serve(async (req: Request) => {
       );
     }
 
-    // Download the audio file
+    // Download the audio file with explicit headers
     console.log('Downloading audio file from:', urlData.publicUrl);
-    const audioResponse = await fetch(urlData.publicUrl);
+    const audioResponse = await fetch(urlData.publicUrl, {
+      headers: {
+        'Accept': 'audio/*'
+      }
+    });
+    
     if (!audioResponse.ok) {
       throw new Error('Failed to download audio file');
     }
-    const audioData = await audioResponse.blob();
+    
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/wav' });
 
     // Create a processed track record
     const { data: processedTrack, error: insertError } = await supabaseClient
@@ -94,9 +107,9 @@ serve(async (req: Request) => {
       switch (processingType) {
         case 'melody':
           console.log('Processing melody extraction...');
-          const melodyResult = await hf.audioToAudio({
+          const melodyResponse = await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: audioData,
+            data: audioBlob,
             parameters: {
               target: 'vocals'
             }
@@ -112,9 +125,9 @@ serve(async (req: Request) => {
           
         case 'drums':
           console.log('Processing drums extraction...');
-          const drumsResult = await hf.audioToAudio({
+          const drumsResponse = await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: audioData,
+            data: audioBlob,
             parameters: {
               target: 'drums'
             }
@@ -122,7 +135,7 @@ serve(async (req: Request) => {
           
           const drumClassification = await hf.audioClassification({
             model: 'antonibigata/drummids',
-            data: audioData
+            data: audioBlob
           });
           
           result = {
@@ -136,9 +149,9 @@ serve(async (req: Request) => {
           
         case 'instrumentation':
           console.log('Processing instrumentation extraction...');
-          const instrumentResult = await hf.audioToAudio({
+          const instrumentResponse = await hf.audioToAudio({
             model: 'facebook/demucs',
-            data: audioData,
+            data: audioBlob,
             parameters: {
               target: 'other'
             }
