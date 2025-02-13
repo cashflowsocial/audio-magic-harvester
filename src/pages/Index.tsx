@@ -37,13 +37,20 @@ const Index = () => {
       const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
       setAudioLevel(average);
       
+      // Debug log every 500ms to avoid console spam
+      if (Date.now() % 500 === 0) {
+        console.log('Current audio level:', average);
+      }
+      
       animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
     }
   };
 
   const startRecording = async () => {
     try {
+      console.log('Requesting microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Microphone access granted!');
       
       // Set up audio analysis
       audioContextRef.current = new AudioContext();
@@ -61,11 +68,13 @@ const Index = () => {
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
+          console.log('Recording data chunk received:', e.data.size, 'bytes');
         }
       };
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
+        console.log('Recording stopped. Total size:', audioBlob.size, 'bytes');
         setIsProcessing(true);
         
         try {
@@ -94,6 +103,7 @@ const Index = () => {
       };
 
       mediaRecorder.start();
+      console.log('Recording started!');
       setIsRecording(true);
     } catch (error) {
       console.error('Error accessing microphone:', error);
@@ -132,12 +142,17 @@ const Index = () => {
         <div className="flex flex-col items-center gap-4">
           {/* Audio level meter */}
           {isRecording && (
-            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-4">
-              <div 
-                className="h-full bg-blue-500 transition-all duration-100"
-                style={{ width: `${(audioLevel / 255) * 100}%` }}
-              />
-            </div>
+            <>
+              <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-4">
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-100"
+                  style={{ width: `${(audioLevel / 255) * 100}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500 mb-2">
+                Audio Level: {Math.round((audioLevel / 255) * 100)}%
+              </p>
+            </>
           )}
 
           <Button
