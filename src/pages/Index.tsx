@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic, Square, Loader2, Play, Pause } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -10,14 +10,50 @@ const Index = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentRecording, setCurrentRecording] = useState<string | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const animationFrameRef = useRef<number>();
   const { toast } = useToast();
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      audioContextRef.current?.close();
+    };
+  }, []);
+
+  const updateAudioLevel = () => {
+    if (analyserRef.current) {
+      const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+      analyserRef.current.getByteFrequencyData(dataArray);
+      
+      // Calculate average level
+      const average = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
+      setAudioLevel(average);
+      
+      animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
+    }
+  };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Set up audio analysis
+      audioContextRef.current = new AudioContext();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+      analyserRef.current.fftSize = 256;
+      
+      updateAudioLevel();
+
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -33,9 +69,7 @@ const Index = () => {
         setIsProcessing(true);
         
         try {
-          // Process the audio using Hugging Face
           const processedAudio = await processAudio(audioBlob);
-          // Save to Supabase storage
           const filename = await saveToStorage(processedAudio);
           const url = await getRecordingUrl(filename);
           setCurrentRecording(url);
@@ -52,6 +86,10 @@ const Index = () => {
           });
         } finally {
           setIsProcessing(false);
+          if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+          }
+          setAudioLevel(0);
         }
       };
 
@@ -92,6 +130,16 @@ const Index = () => {
         <h1 className="text-2xl font-bold text-center mb-8">Voice Recorder</h1>
         
         <div className="flex flex-col items-center gap-4">
+          {/* Audio level meter */}
+          {isRecording && (
+            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-4">
+              <div 
+                className="h-full bg-blue-500 transition-all duration-100"
+                style={{ width: `${(audioLevel / 255) * 100}%` }}
+              />
+            </div>
+          )}
+
           <Button
             size="lg"
             className={`w-16 h-16 rounded-full ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
