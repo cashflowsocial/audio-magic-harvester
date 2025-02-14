@@ -5,6 +5,7 @@ import { corsHeaders } from './config.ts'
 import { testHuggingFaceConnection } from './testProcessor.ts'
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -27,15 +28,12 @@ serve(async (req) => {
     }
 
     // Create response headers
-    const responseHeaders = new Headers();
-    for (const [key, value] of Object.entries(corsHeaders)) {
-      responseHeaders.set(key, value);
-    }
-    responseHeaders.set('Content-Type', 'application/json');
+    const headers = new Headers(corsHeaders);
+    headers.set('Content-Type', 'application/json');
 
     return new Response(
       JSON.stringify(testResult),
-      { headers: responseHeaders }
+      { headers }
     );
 
   } catch (error) {
@@ -46,11 +44,8 @@ serve(async (req) => {
     });
     
     // Create error response headers
-    const errorHeaders = new Headers();
-    for (const [key, value] of Object.entries(corsHeaders)) {
-      errorHeaders.set(key, value);
-    }
-    errorHeaders.set('Content-Type', 'application/json');
+    const headers = new Headers(corsHeaders);
+    headers.set('Content-Type', 'application/json');
 
     return new Response(
       JSON.stringify({
@@ -58,7 +53,7 @@ serve(async (req) => {
         message: error.message
       }),
       { 
-        headers: errorHeaders,
+        headers,
         status: 500
       }
     );

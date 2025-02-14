@@ -15,13 +15,13 @@ export async function testHuggingFaceConnection(hf: HfInference) {
 
     console.log('Testing API connection...');
     try {
-      // Create headers object properly
-      const headers = new Headers();
-      headers.set('Authorization', `Bearer ${token}`);
-
-      const response = await fetch('https://api-inference.huggingface.co/models/gpt2', {
+      // Create a simple test request to the Hugging Face API
+      const response = await fetch('https://api-inference.huggingface.co/status', {
         method: 'GET',
-        headers
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
