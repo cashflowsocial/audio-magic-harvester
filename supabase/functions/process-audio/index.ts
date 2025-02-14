@@ -1,8 +1,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4'
 import { corsHeaders } from './config.ts'
-import { testHuggingFaceConnection } from './testProcessor.ts'
+import { createSupabaseClient, createProcessedTrack, updateProcessedTrack, markProcessingAsFailed } from './db.ts'
+import { ProcessingType } from './types.ts'
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -11,51 +11,59 @@ serve(async (req) => {
   }
 
   try {
-    const token = Deno.env.get('HUGGING_FACE_API_KEY');
-    if (!token) {
-      throw new Error('Hugging Face API token not configured');
+    const { recordingId, processingType } = await req.json()
+    
+    if (!recordingId || !processingType) {
+      throw new Error('Missing required parameters')
     }
 
-    console.log('Initializing Hugging Face client...');
-    const hf = new HfInference(token);
+    const supabase = createSupabaseClient()
 
-    console.log('Testing Hugging Face connection...');
-    const testResult = await testHuggingFaceConnection(hf);
-    console.log('Connection test result:', testResult);
+    // Create a new processed track record
+    const track = await createProcessedTrack(supabase, recordingId, processingType as ProcessingType)
 
-    if (!testResult.success) {
-      throw new Error(testResult.message);
+    // Here we would implement the actual audio processing
+    // For now, we'll simulate processing with a mock response
+    const mockResult = {
+      status: 'completed',
+      output: `Mock ${processingType} processing result`
     }
 
-    // Create response headers
-    const headers = new Headers(corsHeaders);
-    headers.set('Content-Type', 'application/json');
+    // Update the processed track with results
+    await updateProcessedTrack(
+      supabase,
+      track.id,
+      mockResult,
+      processingType as ProcessingType,
+      'https://mock-url.com/output.mp3'
+    )
+
+    const headers = new Headers(corsHeaders)
+    headers.set('Content-Type', 'application/json')
 
     return new Response(
-      JSON.stringify(testResult),
+      JSON.stringify({
+        success: true,
+        trackId: track.id
+      }),
       { headers }
-    );
+    )
 
   } catch (error) {
-    console.error('Error:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    });
+    console.error('Error:', error)
     
-    // Create error response headers
-    const headers = new Headers(corsHeaders);
-    headers.set('Content-Type', 'application/json');
+    const headers = new Headers(corsHeaders)
+    headers.set('Content-Type', 'application/json')
 
     return new Response(
       JSON.stringify({
         success: false,
-        message: error.message
+        error: error.message
       }),
       { 
         headers,
         status: 500
       }
-    );
+    )
   }
-});
+})

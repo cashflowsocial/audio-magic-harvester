@@ -1,6 +1,6 @@
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
-import { ProcessingType } from './types.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
+import { ProcessingType } from './types.ts'
 
 export const createSupabaseClient = () => {
   return createClient(
@@ -12,19 +12,8 @@ export const createSupabaseClient = () => {
         persistSession: false
       }
     }
-  );
-};
-
-export const getRecording = async (supabaseClient: any, recordingId: string) => {
-  const { data, error } = await supabaseClient
-    .from('recordings')
-    .select('*')
-    .eq('id', recordingId)
-    .single();
-
-  if (error) throw new Error('Recording not found');
-  return data;
-};
+  )
+}
 
 export const createProcessedTrack = async (
   supabaseClient: any, 
@@ -39,42 +28,42 @@ export const createProcessedTrack = async (
       processing_status: 'processing'
     })
     .select()
-    .single();
+    .single()
 
-  if (error) throw new Error(`Error creating processed track: ${error.message}`);
-  return data;
-};
+  if (error) throw new Error(`Error creating processed track: ${error.message}`)
+  return data
+}
 
 export const updateProcessedTrack = async (
   supabaseClient: any,
   trackId: string,
   result: any,
   processingType: ProcessingType,
-  publicUrl: string
+  outputUrl: string
 ) => {
   const { error } = await supabaseClient
     .from('processed_tracks')
     .update({
       processing_status: 'completed',
-      melody_file_path: processingType === 'melody' ? JSON.stringify(result) : null,
-      drums_file_path: processingType === 'drums' ? JSON.stringify(result) : null,
-      combined_file_path: publicUrl
+      output_url: outputUrl
     })
-    .eq('id', trackId);
+    .eq('id', trackId)
 
-  if (error) throw new Error(`Error updating processed track: ${error.message}`);
-};
+  if (error) throw new Error(`Error updating processed track: ${error.message}`)
+}
 
 export const markProcessingAsFailed = async (
   supabaseClient: any,
   trackId: string,
   errorMessage: string
 ) => {
-  await supabaseClient
+  const { error } = await supabaseClient
     .from('processed_tracks')
     .update({
       processing_status: 'failed',
       error_message: errorMessage
     })
-    .eq('id', trackId);
-};
+    .eq('id', trackId)
+
+  if (error) throw new Error(`Error marking processing as failed: ${error.message}`)
+}
