@@ -18,6 +18,8 @@ export type Database = {
           id: string
           melody_file_path: string | null
           output_url: string | null
+          processed_audio_status: string | null
+          processed_audio_url: string | null
           processing_status: string | null
           processing_type: Database["public"]["Enums"]["processing_type"] | null
           recording_id: string | null
@@ -32,6 +34,8 @@ export type Database = {
           id?: string
           melody_file_path?: string | null
           output_url?: string | null
+          processed_audio_status?: string | null
+          processed_audio_url?: string | null
           processing_status?: string | null
           processing_type?:
             | Database["public"]["Enums"]["processing_type"]
@@ -48,6 +52,8 @@ export type Database = {
           id?: string
           melody_file_path?: string | null
           output_url?: string | null
+          processed_audio_status?: string | null
+          processed_audio_url?: string | null
           processing_status?: string | null
           processing_type?:
             | Database["public"]["Enums"]["processing_type"]
