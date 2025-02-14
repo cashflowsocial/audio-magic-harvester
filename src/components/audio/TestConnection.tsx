@@ -13,16 +13,23 @@ export const TestConnection = () => {
     });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      // First check if we have a session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
+      if (sessionError || !session) {
+        throw new Error("Authentication required. Please log in first.");
+      }
+
       const response = await supabase.functions.invoke('process-audio', {
         body: { test: true },
         headers: {
-          Authorization: `Bearer ${session?.access_token}`
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
         }
       });
 
       if (response.error) {
+        console.error('Function error:', response.error);
         throw new Error(response.error.message);
       }
 
@@ -39,7 +46,7 @@ export const TestConnection = () => {
       toast({
         variant: "destructive",
         title: "Test Failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : "An unknown error occurred",
       });
     }
   };
