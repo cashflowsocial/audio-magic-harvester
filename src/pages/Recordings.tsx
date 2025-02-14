@@ -2,16 +2,27 @@
 import { useQuery } from "@tanstack/react-query"
 import { supabase } from "@/integrations/supabase/client"
 import { PlaybackControl } from "@/components/audio/PlaybackControl"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ExtractButtons } from "@/components/audio/ExtractButtons"
 import { getRecordingUrl, type RecordingWithUrl } from "@/utils/audioProcessing"
 import { NavMenu } from "@/components/NavMenu"
+import { useNavigate } from "react-router-dom"
 
 const Recordings = () => {
   const [playingId, setPlayingId] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const navigate = useNavigate()
 
-  const { data: recordings, isLoading } = useQuery<RecordingWithUrl[]>({
+  useEffect(() => {
+    // Check authentication status when component mounts
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate('/auth')
+      }
+    })
+  }, [navigate])
+
+  const { data: recordings, isLoading } = useQuery({
     queryKey: ['recordings'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -81,7 +92,7 @@ const Recordings = () => {
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Recordings
+export default Recordings;
