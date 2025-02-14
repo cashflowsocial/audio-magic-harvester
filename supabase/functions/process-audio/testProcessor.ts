@@ -8,12 +8,21 @@ export async function testHuggingFaceConnection(hf: HfInference) {
       throw new Error('Hugging Face client not initialized');
     }
 
-    // Try a simpler text classification task
+    const token = Deno.env.get('HUGGING_FACE_API_KEY');
+    if (!token) {
+      throw new Error('API token not found');
+    }
+
+    // Test API connection with proper header formatting
     console.log('Testing API connection...');
+    const headers = new Headers({
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    });
+
     const response = await fetch('https://api-inference.huggingface.co/status', {
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('HUGGING_FACE_API_KEY')}`,
-      },
+      method: 'GET',
+      headers: headers
     });
 
     if (!response.ok) {

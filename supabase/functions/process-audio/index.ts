@@ -16,8 +16,6 @@ serve(async (req) => {
     }
 
     console.log('Initializing Hugging Face client...');
-    
-    // Initialize with default configuration
     const hf = new HfInference(token);
 
     // Test the connection
@@ -32,10 +30,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify(testResult),
       { 
-        headers: { 
+        headers: new Headers({
           ...corsHeaders,
           'Content-Type': 'application/json'
-        }
+        })
       }
     );
 
@@ -52,10 +50,10 @@ serve(async (req) => {
         message: error.message
       }),
       { 
-        headers: { 
+        headers: new Headers({
           ...corsHeaders,
           'Content-Type': 'application/json'
-        },
+        }),
         status: 500
       }
     );
