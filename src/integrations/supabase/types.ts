@@ -14,8 +14,10 @@ export type Database = {
           combined_file_path: string | null
           created_at: string | null
           drums_file_path: string | null
+          error_message: string | null
           id: string
           melody_file_path: string | null
+          output_url: string | null
           processing_status: string | null
           processing_type: Database["public"]["Enums"]["processing_type"] | null
           recording_id: string | null
@@ -26,8 +28,10 @@ export type Database = {
           combined_file_path?: string | null
           created_at?: string | null
           drums_file_path?: string | null
+          error_message?: string | null
           id?: string
           melody_file_path?: string | null
+          output_url?: string | null
           processing_status?: string | null
           processing_type?:
             | Database["public"]["Enums"]["processing_type"]
@@ -40,8 +44,10 @@ export type Database = {
           combined_file_path?: string | null
           created_at?: string | null
           drums_file_path?: string | null
+          error_message?: string | null
           id?: string
           melody_file_path?: string | null
+          output_url?: string | null
           processing_status?: string | null
           processing_type?:
             | Database["public"]["Enums"]["processing_type"]
