@@ -13,3 +13,4 @@ export interface ProcessingResult {
   timeSignature?: string;
   patternData?: any;
 }
+

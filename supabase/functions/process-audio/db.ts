@@ -84,3 +84,4 @@ export const markProcessingAsFailed = async (
     throw new Error(`Error marking processing as failed: ${error.message}`)
   }
 }
+
