@@ -5,7 +5,6 @@ import { corsHeaders } from './config.ts'
 import { testHuggingFaceConnection } from './testProcessor.ts'
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -17,8 +16,7 @@ serve(async (req) => {
     }
 
     console.log('Initializing Hugging Face client...');
-    // Initialize with proper token string
-    const hf = new HfInference(String(token));
+    const hf = new HfInference(token);
 
     // Test the connection
     console.log('Testing Hugging Face connection...');
@@ -29,9 +27,12 @@ serve(async (req) => {
       throw new Error(testResult.message);
     }
 
+    const headers = new Headers(corsHeaders);
+    headers.set('Content-Type', 'application/json');
+
     return new Response(
       JSON.stringify(testResult),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers }
     );
 
   } catch (error) {
@@ -41,13 +42,16 @@ serve(async (req) => {
       stack: error.stack
     });
     
+    const headers = new Headers(corsHeaders);
+    headers.set('Content-Type', 'application/json');
+
     return new Response(
       JSON.stringify({
         success: false,
         message: error.message
       }),
       { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers,
         status: 500
       }
     );
