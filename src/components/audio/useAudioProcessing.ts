@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -134,16 +135,6 @@ export const useAudioProcessing = (recordingId: string | null) => {
     }
   };
 
-  const getTrackByType = (type: string) => {
-    return processedTracks?.find(track => track.processing_type === type);
-  };
-
-  const getProcessingTime = (type: string) => {
-    const startTime = startTimes[type];
-    if (!startTime) return '';
-    return `${Math.floor((Date.now() - startTime) / 1000)}s`;
-  };
-
   return {
     processedTracks,
     playingType,
@@ -151,7 +142,11 @@ export const useAudioProcessing = (recordingId: string | null) => {
     processingType,
     handleCancel,
     handleExtract,
-    getTrackByType,
-    getProcessingTime
+    getTrackByType: (type: string) => processedTracks?.find(track => track.processing_type === type),
+    getProcessingTime: (type: string) => {
+      const startTime = startTimes[type];
+      if (!startTime) return '';
+      return `${Math.floor((Date.now() - startTime) / 1000)}s`;
+    }
   };
 };
