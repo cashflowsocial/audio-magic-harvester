@@ -13,19 +13,8 @@ export const TestConnection = () => {
     });
 
     try {
-      // First check if we have a session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        throw new Error("Authentication required. Please log in first.");
-      }
-
       const response = await supabase.functions.invoke('process-audio', {
         body: { test: true },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        }
       });
 
       if (response.error) {
