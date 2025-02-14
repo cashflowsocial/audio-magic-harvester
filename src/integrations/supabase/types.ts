@@ -241,6 +241,7 @@ export type Database = {
         | "percussion"
       processing_type: "drums" | "melody" | "instrumentation"
       recording_status: "pending" | "processing" | "completed" | "failed"
+      sample_type: "kick" | "snare" | "hihat" | "crash" | "tom" | "percussion"
     }
     CompositeTypes: {
       [_ in never]: never
