@@ -1,6 +1,6 @@
 
 import { Button } from "@/components/ui/button";
-import { Drumstick, Music, Guitar, Play } from "lucide-react";
+import { Drumstick, Music, Guitar, Play, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -15,9 +15,10 @@ interface ExtractButtonsProps {
 export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) => {
   const { toast } = useToast();
   const [playingType, setPlayingType] = useState<string | null>(null);
+  const [processingType, setProcessingType] = useState<string | null>(null);
 
   // Query processed tracks
-  const { data: processedTracks, isLoading } = useQuery({
+  const { data: processedTracks, isLoading, refetch } = useQuery({
     queryKey: ['processed-tracks', recordingId],
     queryFn: async () => {
       if (!recordingId) return [];
@@ -29,12 +30,20 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       if (error) throw error;
       return data;
     },
-    enabled: !!recordingId
+    enabled: !!recordingId,
+    refetchInterval: (data) => {
+      // If any track is processing, refetch every 5 seconds
+      if (data?.some(track => track.processing_status === 'processing')) {
+        return 5000;
+      }
+      return false;
+    }
   });
 
   const handleExtract = async (type: 'drums' | 'melody' | 'instrumentation') => {
     if (!recordingId) return;
 
+    setProcessingType(type);
     toast({
       title: "Processing Started",
       description: `Starting ${type} extraction...`,
@@ -54,6 +63,7 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       }
 
       console.log(`Processing response:`, response);
+      await refetch(); // Refetch to get the latest status
 
       toast({
         title: "Processing Complete",
@@ -68,6 +78,8 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
         title: "Processing Failed",
         description: error instanceof Error ? error.message : `Failed to extract ${type}. Please try again.`,
       });
+    } finally {
+      setProcessingType(null);
     }
   };
 
@@ -75,64 +87,42 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     return processedTracks?.find(track => track.processing_type === type);
   };
 
+  const renderExtractButton = (type: 'drums' | 'melody' | 'instrumentation') => {
+    const track = getTrackByType(type);
+    const isProcessing = processingType === type || track?.processing_status === 'processing';
+    const icon = {
+      drums: <Drumstick className="h-4 w-4" />,
+      melody: <Music className="h-4 w-4" />,
+      instrumentation: <Guitar className="h-4 w-4" />
+    }[type];
+
+    return (
+      <div className="space-y-2">
+        <Button
+          onClick={() => handleExtract(type)}
+          disabled={disabled || isProcessing}
+          className="flex items-center gap-2 w-full"
+          variant="outline"
+        >
+          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
+          {isProcessing ? `Processing ${type}...` : `Extract & Create ${type}`}
+        </Button>
+        {track?.processed_audio_url && (
+          <PlaybackControl
+            audioUrl={track.processed_audio_url}
+            isPlaying={playingType === type}
+            onPlayingChange={(playing) => setPlayingType(playing ? type : null)}
+          />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-3 w-full max-w-sm">
-      <div className="space-y-2">
-        <Button
-          onClick={() => handleExtract('drums')}
-          disabled={disabled}
-          className="flex items-center gap-2 w-full"
-          variant="outline"
-        >
-          <Drumstick className="h-4 w-4" />
-          Extract & Create Drums
-        </Button>
-        {getTrackByType('drums')?.processed_audio_url && (
-          <PlaybackControl
-            audioUrl={getTrackByType('drums')?.processed_audio_url || ''}
-            isPlaying={playingType === 'drums'}
-            onPlayingChange={(playing) => setPlayingType(playing ? 'drums' : null)}
-          />
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Button
-          onClick={() => handleExtract('melody')}
-          disabled={disabled}
-          className="flex items-center gap-2 w-full"
-          variant="outline"
-        >
-          <Music className="h-4 w-4" />
-          Extract & Create Melody
-        </Button>
-        {getTrackByType('melody')?.processed_audio_url && (
-          <PlaybackControl
-            audioUrl={getTrackByType('melody')?.processed_audio_url || ''}
-            isPlaying={playingType === 'melody'}
-            onPlayingChange={(playing) => setPlayingType(playing ? 'melody' : null)}
-          />
-        )}
-      </div>
-
-      <div className="space-y-2">
-        <Button
-          onClick={() => handleExtract('instrumentation')}
-          disabled={disabled}
-          className="flex items-center gap-2 w-full"
-          variant="outline"
-        >
-          <Guitar className="h-4 w-4" />
-          Extract & Create Instrumentation
-        </Button>
-        {getTrackByType('instrumentation')?.processed_audio_url && (
-          <PlaybackControl
-            audioUrl={getTrackByType('instrumentation')?.processed_audio_url || ''}
-            isPlaying={playingType === 'instrumentation'}
-            onPlayingChange={(playing) => setPlayingType(playing ? 'instrumentation' : null)}
-          />
-        )}
-      </div>
+      {renderExtractButton('drums')}
+      {renderExtractButton('melody')}
+      {renderExtractButton('instrumentation')}
     </div>
   );
 };
