@@ -48,7 +48,7 @@ export const useAudioRecorder = () => {
       analyserRef.current = audioContextRef.current.createAnalyser();
       const source = audioContextRef.current.createMediaStreamSource(stream);
       source.connect(analyserRef.current);
-      analyserRef.current.fftSize = 256;
+      analyserRef.current.fftSize = 2048;
       
       updateAudioLevel();
 
@@ -74,14 +74,14 @@ export const useAudioRecorder = () => {
           
           toast({
             title: "Success",
-            description: "Recording saved successfully!",
+            description: "Recording saved and analyzed successfully!",
           });
           
         } catch (error) {
           console.error('Error processing/saving audio:', error);
           toast({
             title: "Error",
-            description: "Failed to save the recording.",
+            description: "Failed to save or analyze the recording.",
             variant: "destructive",
           });
         } finally {
