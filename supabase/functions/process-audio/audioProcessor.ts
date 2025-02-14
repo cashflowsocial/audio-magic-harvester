@@ -1,3 +1,4 @@
+
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
@@ -193,7 +194,7 @@ export const processAudio = async (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',  // Fixed model name for the latest version
+        model: 'gpt-4',  // Fixed model name
         messages: [
           {
             role: 'system',
