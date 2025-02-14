@@ -17,18 +17,8 @@ serve(async (req) => {
 
     console.log('Initializing Hugging Face client...');
     
-    // Initialize with simpler fetch configuration
-    const hf = new HfInference(token, {
-      fetch: (url: string, options: RequestInit = {}) => {
-        return fetch(url, {
-          ...options,
-          headers: {
-            ...options.headers,
-            'Authorization': `Bearer ${token}`
-          }
-        });
-      }
-    });
+    // Initialize with default configuration
+    const hf = new HfInference(token);
 
     // Test the connection
     console.log('Testing Hugging Face connection...');
