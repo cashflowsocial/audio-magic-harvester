@@ -1,49 +1,130 @@
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
+import { corsHeaders } from '../_shared/cors.ts'
 
-const supabase = createClient(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-);
+const SAMPLE_TYPES = ['kick', 'snare', 'hihat', 'crash', 'tom', 'percussion'] as const;
 
-// Basic drum sample data (base64 encoded short audio clips)
-const samples = {
-  kick: 'SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAGAAADQgA4ODg4ODg4ODg4ODg4ODhVVVVVVVVVVVVVVVVVVXJycnJycnJycnJycnJycn9/f39/f39/f39/f39/f5KSkpKSkpKSkpKSkpKSkqWlpaWlpaWlpaWlpaWlpbi4uLi4uLi4uLi4uLi4uP////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYAAAAAAAAAA0Ka+NAnAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBkEM/wAABpAAAACAAADSAAAAEAAAGkAAAAIAAANIAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZBLP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGQkz/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV',
-  snare: 'SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAGAAADQgA4ODg4ODg4ODg4ODg4ODhVVVVVVVVVVVVVVVVVVXJycnJycnJycnJycnJycn9/f39/f39/f39/f39/f5KSkpKSkpKSkpKSkpKSkqWlpaWlpaWlpaWlpaWlpbi4uLi4uLi4uLi4uLi4uP////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYAAAAAAAAAA0Ka+NAnAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBkFM/wAABpAAAACAAADSAAAAEAAAGkAAAAIAAANIAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZBzP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGQ0z/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV',
-  hihat: 'SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAGAAADQgA4ODg4ODg4ODg4ODg4ODhVVVVVVVVVVVVVVVVVVXJycnJycnJycnJycnJycn9/f39/f39/f39/f39/f5KSkpKSkpKSkpKSkpKSkqWlpaWlpaWlpaWlpaWlpbi4uLi4uLi4uLi4uLi4uP////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYAAAAAAAAAA0Ka+NAnAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBkHM/wAABpAAAACAAADSAAAAEAAAGkAAAAIAAANIAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZDDP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGRIz/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV',
-  crash: 'SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAGAAADQgA4ODg4ODg4ODg4ODg4ODhVVVVVVVVVVVVVVVVVVXJycnJycnJycnJycnJycn9/f39/f39/f39/f39/f5KSkpKSkpKSkpKSkpKSkqWlpaWlpaWlpaWlpaWlpbi4uLi4uLi4uLi4uLi4uP////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAYAAAAAAAAAA0Ka+NAnAAAAAAAAAAAAAAAAAAAA//sQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAETEFNRTMuMTAwVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVX/+xBkKM/wAABpAAAACAAADSAAAAEAAAGkAAAAIAAANIAAAARVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//sQZEDP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7EGRYz/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV'
-};
+interface FreesoundResponse {
+  results: Array<{
+    id: number;
+    name: string;
+    download: string;
+    previews: {
+      'preview-hq-mp3': string;
+    };
+  }>;
+}
 
 serve(async (req) => {
-  try {
-    // Upload each sample to the drum_samples bucket
-    for (const [name, base64Data] of Object.entries(samples)) {
-      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      const blob = new Blob([binaryData], { type: 'audio/mp3' });
-      
-      const { error } = await supabase.storage
-        .from('drum_samples')
-        .upload(`${name}.mp3`, blob, {
-          contentType: 'audio/mp3',
-          upsert: true
-        });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
 
-      if (error) {
-        throw error;
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
+
+    // Create a new drum kit
+    const { data: kit, error: kitError } = await supabase
+      .from('drum_kits')
+      .insert({
+        name: 'Basic Kit',
+        description: 'A basic drum kit with essential sounds'
+      })
+      .select()
+      .single()
+
+    if (kitError) throw kitError
+
+    // Get Freesound credentials from Supabase
+    const clientId = Deno.env.get('FREESOUND_CLIENT_ID')
+    const clientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET')
+
+    if (!clientId || !clientSecret) {
+      throw new Error('Missing Freesound credentials')
+    }
+
+    // Get access token
+    const tokenResponse = await fetch('https://freesound.org/apiv2/oauth2/token/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials',
+      }),
+    })
+
+    const { access_token } = await tokenResponse.json()
+
+    // Download and store samples for each type
+    for (const sampleType of SAMPLE_TYPES) {
+      // Search Freesound for high-quality samples
+      const searchResponse = await fetch(
+        `https://freesound.org/apiv2/search/text/?query=${sampleType}+drum&filter=duration:[0 TO 2]&fields=id,name,previews,download`,
+        {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        }
+      )
+
+      const searchData: FreesoundResponse = await searchResponse.json()
+      const sample = searchData.results[0] // Get the first result
+
+      if (sample) {
+        // Download the sample
+        const sampleResponse = await fetch(sample.previews['preview-hq-mp3'])
+        const sampleData = await sampleResponse.arrayBuffer()
+
+        // Upload to Supabase Storage
+        const filename = `${sampleType}-${sample.id}.mp3`
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('drum_samples')
+          .upload(filename, sampleData, {
+            contentType: 'audio/mpeg',
+            cacheControl: '3600',
+            upsert: false,
+          })
+
+        if (uploadError) throw uploadError
+
+        // Get the public URL
+        const { data: urlData } = supabase.storage
+          .from('drum_samples')
+          .getPublicUrl(filename)
+
+        // Store sample metadata in database
+        await supabase
+          .from('drum_kit_samples')
+          .insert({
+            kit_id: kit.id,
+            sample_type: sampleType,
+            filename,
+            storage_path: urlData.publicUrl
+          })
       }
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: 'Drum samples initialized successfully' }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
-
+      JSON.stringify({ message: 'Drum kit initialized successfully', kitId: kit.id }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
+    )
   } catch (error) {
-    console.error('Error initializing drum samples:', error);
     return new Response(
-      JSON.stringify({ success: false, error: error.message }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+      JSON.stringify({ error: error.message }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      }
+    )
   }
-});
+})
+
