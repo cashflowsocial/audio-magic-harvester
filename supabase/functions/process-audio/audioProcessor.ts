@@ -1,6 +1,5 @@
 
 import { ProcessingType, ProcessingResult } from './types.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
 export const processAudio = async (
   audioUrl: string,
@@ -45,33 +44,54 @@ export const processAudio = async (
     // Analyze with GPT-4
     console.log('[Audio Processor] Generating musical analysis...');
     const systemPrompt = processingType === 'drums' ? 
-      `You are a drum pattern expert. Analyze the given beatbox sounds and convert them into a precise drum pattern with:
-      1. Tempo (BPM)
-      2. Time signature
-      3. Exact placement of:
-         - Kick drum (usually "boom", "b", "puh")
-         - Snare drum (usually "psh", "ka", "ts")
-         - Hi-hat (usually "ts", "ch", "tss")
-         - Cymbals and other percussion
-      4. Any variations or fills
-      Return a valid JSON object with these exact fields and nothing else:
+      `You are a drum pattern expert that can interpret beatbox sounds and vocal drum imitations into precise drum patterns.
+      
+      When you receive a transcription of vocal drum sounds:
+      1. First identify the tempo by analyzing the rhythm and spacing of the sounds
+      2. Determine the time signature from the pattern repetition
+      3. Map each sound to the corresponding drum:
+         - Low sounds like "boom", "bm", "b", "puh" = Kick drum
+         - Sharp sounds like "psh", "ka", "ts" = Snare drum
+         - High sounds like "ts", "ch", "tss" = Hi-hat
+         - Crash-like sounds = Crash cymbal
+      4. Position each drum hit on a numerical timeline where:
+         - 1 = first beat
+         - 1.5 = eighth note after first beat
+         - 2 = second beat
+         etc.
+      
+      Return ONLY a valid JSON object with this exact format:
       {
-        "tempo": number,
-        "timeSignature": string,
+        "tempo": number (between 60-200),
+        "timeSignature": string (e.g. "4/4"),
         "pattern": {
-          "kick": number[],
-          "snare": number[],
-          "hihat": number[],
-          "crash": number[]
+          "kick": number[] (beat positions),
+          "snare": number[] (beat positions),
+          "hihat": number[] (beat positions),
+          "crash": number[] (beat positions)
         }
-      }` 
-      : `You are a musical expert. Analyze the given text and extract ${processingType} patterns. Return a valid JSON object with these exact fields and nothing else:
+      }`
+      : `You are a musical expert that can interpret sung or hummed melodies into precise musical patterns.
+      
+      When you receive a transcription of a melody:
+      1. First identify the tempo from the rhythm
+      2. Determine the time signature from the pattern
+      3. Map the notes to a numerical scale where:
+         - 1-7 represents scale degrees in the major scale
+         - 0 represents rests
+      4. Map note durations where:
+         - 1 = quarter note
+         - 0.5 = eighth note
+         - 2 = half note
+         etc.
+      
+      Return ONLY a valid JSON object with this exact format:
       {
-        "tempo": number,
-        "timeSignature": string,
+        "tempo": number (between 60-200),
+        "timeSignature": string (e.g. "4/4"),
         "pattern": {
-          "notes": number[],
-          "durations": number[]
+          "notes": number[] (scale degrees),
+          "durations": number[] (note lengths)
         }
       }`;
 
@@ -90,10 +110,10 @@ export const processAudio = async (
           },
           {
             role: 'user',
-            content: `Analyze this musical idea: ${transcription.text}`
+            content: `Analyze these sounds carefully and create a precise musical pattern: ${transcription.text}`
           }
         ],
-        temperature: 0.7,
+        temperature: 0.3, // Lower temperature for more precise output
       }),
     });
 
@@ -110,14 +130,33 @@ export const processAudio = async (
     let parsedAnalysis;
     try {
       parsedAnalysis = JSON.parse(analysisContent);
+      
+      // Validate the parsed analysis
+      if (!parsedAnalysis.tempo || !parsedAnalysis.timeSignature || !parsedAnalysis.pattern) {
+        throw new Error('Invalid analysis format: missing required fields');
+      }
+      
+      if (processingType === 'drums') {
+        if (!Array.isArray(parsedAnalysis.pattern.kick) || 
+            !Array.isArray(parsedAnalysis.pattern.snare) ||
+            !Array.isArray(parsedAnalysis.pattern.hihat) ||
+            !Array.isArray(parsedAnalysis.pattern.crash)) {
+          throw new Error('Invalid drum pattern format');
+        }
+      } else {
+        if (!Array.isArray(parsedAnalysis.pattern.notes) || 
+            !Array.isArray(parsedAnalysis.pattern.durations)) {
+          throw new Error('Invalid melody pattern format');
+        }
+      }
     } catch (error) {
-      console.error('[Audio Processor] Failed to parse analysis JSON:', error);
+      console.error('[Audio Processor] Failed to parse or validate analysis JSON:', error);
       throw new Error('Failed to parse musical analysis output');
     }
 
     return {
       type: processingType,
-      url: audioUrl, // This will be updated with the actual processed audio URL
+      url: audioUrl,
       processed: true,
       analysis: analysisContent,
       transcription: transcription.text,
