@@ -51,7 +51,11 @@ export const updateProcessedTrack = async (
     .update({
       processing_status: 'completed',
       processed_audio_url: outputUrl,
-      output_url: outputUrl
+      output_url: outputUrl,
+      musical_analysis: result.musicalAnalysis,
+      tempo: result.tempo,
+      time_signature: result.timeSignature,
+      pattern_data: result.patternData
     })
     .eq('id', trackId)
 

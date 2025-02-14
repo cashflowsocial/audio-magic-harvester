@@ -17,12 +17,16 @@ export type Database = {
           error_message: string | null
           id: string
           melody_file_path: string | null
+          musical_analysis: Json | null
           output_url: string | null
+          pattern_data: Json | null
           processed_audio_status: string | null
           processed_audio_url: string | null
           processing_status: string | null
           processing_type: Database["public"]["Enums"]["processing_type"] | null
           recording_id: string | null
+          tempo: number | null
+          time_signature: string | null
           updated_at: string | null
           version: number | null
         }
@@ -33,7 +37,9 @@ export type Database = {
           error_message?: string | null
           id?: string
           melody_file_path?: string | null
+          musical_analysis?: Json | null
           output_url?: string | null
+          pattern_data?: Json | null
           processed_audio_status?: string | null
           processed_audio_url?: string | null
           processing_status?: string | null
@@ -41,6 +47,8 @@ export type Database = {
             | Database["public"]["Enums"]["processing_type"]
             | null
           recording_id?: string | null
+          tempo?: number | null
+          time_signature?: string | null
           updated_at?: string | null
           version?: number | null
         }
@@ -51,7 +59,9 @@ export type Database = {
           error_message?: string | null
           id?: string
           melody_file_path?: string | null
+          musical_analysis?: Json | null
           output_url?: string | null
+          pattern_data?: Json | null
           processed_audio_status?: string | null
           processed_audio_url?: string | null
           processing_status?: string | null
@@ -59,6 +69,8 @@ export type Database = {
             | Database["public"]["Enums"]["processing_type"]
             | null
           recording_id?: string | null
+          tempo?: number | null
+          time_signature?: string | null
           updated_at?: string | null
           version?: number | null
         }

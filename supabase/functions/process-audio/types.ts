@@ -8,4 +8,8 @@ export interface ProcessingResult {
   analysis: string;
   transcription: string;
   audioBuffer?: ArrayBuffer;
+  musicalAnalysis?: any;
+  tempo?: number;
+  timeSignature?: string;
+  patternData?: any;
 }
