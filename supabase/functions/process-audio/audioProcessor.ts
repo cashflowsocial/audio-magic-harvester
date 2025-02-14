@@ -133,7 +133,7 @@ export const processAudio = async (
     console.log('[Audio Processor] Transcription result:', transcription);
 
     // Analyze with GPT-4o-mini
-    console.log('[Audio Processor] Generating musical analysis...');
+    console.log('[Audio Processor] Requesting GPT analysis...');
     const systemPrompt = processingType === 'drums' ? 
       `You are a drum pattern expert that can interpret beatbox sounds and vocal drum imitations into precise drum patterns.
       
@@ -193,7 +193,7 @@ export const processAudio = async (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',  // Using the recommended fast and cheap model
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -215,15 +215,24 @@ export const processAudio = async (
     }
 
     const analysis = await gptResponse.json();
-    console.log('[Audio Processor] Musical analysis:', analysis);
+    console.log('[Audio Processor] Raw GPT response:', analysis);
+
+    if (!analysis.choices?.[0]?.message?.content) {
+      console.error('[Audio Processor] Invalid GPT response format:', analysis);
+      throw new Error('Invalid GPT response format');
+    }
 
     const analysisContent = analysis.choices[0].message.content;
+    console.log('[Audio Processor] Analysis content:', analysisContent);
+
     let parsedAnalysis;
     try {
       parsedAnalysis = JSON.parse(analysisContent);
+      console.log('[Audio Processor] Parsed analysis:', parsedAnalysis);
       
       // Validate the parsed analysis
       if (!parsedAnalysis.tempo || !parsedAnalysis.timeSignature || !parsedAnalysis.pattern) {
+        console.error('[Audio Processor] Missing required fields in analysis:', parsedAnalysis);
         throw new Error('Invalid analysis format: missing required fields');
       }
       
@@ -232,72 +241,76 @@ export const processAudio = async (
             !Array.isArray(parsedAnalysis.pattern.snare) ||
             !Array.isArray(parsedAnalysis.pattern.hihat) ||
             !Array.isArray(parsedAnalysis.pattern.crash)) {
+          console.error('[Audio Processor] Invalid drum pattern format:', parsedAnalysis.pattern);
           throw new Error('Invalid drum pattern format');
         }
-
-        // Generate new drum audio based on the analysis
-        console.log('[Audio Processor] Generating drum audio...');
-        const drumAudioBuffer = await generateDrumAudio(parsedAnalysis.pattern, parsedAnalysis.tempo);
-        
-        // Create a blob from the buffer
-        const drumAudioBlob = new Blob([drumAudioBuffer], { type: 'audio/wav' });
-        
-        // Upload to Supabase storage
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
-        
-        const fileName = `processed-${processingType}-${crypto.randomUUID()}.mp3`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('processed_audio')
-          .upload(fileName, drumAudioBlob);
-          
-        if (uploadError) {
-          throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
-        }
-        
-        // Get the public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('processed_audio')
-          .getPublicUrl(fileName);
-
-        return {
-          type: processingType,
-          url: publicUrl,
-          processed: true,
-          analysis: analysisContent,
-          transcription: transcription.text,
-          audioBuffer: drumAudioBuffer,
-          musicalAnalysis: parsedAnalysis,
-          tempo: parsedAnalysis.tempo,
-          timeSignature: parsedAnalysis.timeSignature,
-          patternData: parsedAnalysis.pattern
-        };
       } else {
         if (!Array.isArray(parsedAnalysis.pattern.notes) || 
             !Array.isArray(parsedAnalysis.pattern.durations)) {
+          console.error('[Audio Processor] Invalid melody pattern format:', parsedAnalysis.pattern);
           throw new Error('Invalid melody pattern format');
         }
       }
     } catch (error) {
       console.error('[Audio Processor] Failed to parse or validate analysis JSON:', error);
+      console.error('Raw content that failed to parse:', analysisContent);
       throw new Error('Failed to parse musical analysis output');
     }
 
-    return {
-      type: processingType,
-      url: audioUrl,
-      processed: true,
-      analysis: analysisContent,
-      transcription: transcription.text,
-      audioBuffer: audioBuffer,
-      musicalAnalysis: parsedAnalysis,
-      tempo: parsedAnalysis.tempo,
-      timeSignature: parsedAnalysis.timeSignature,
-      patternData: parsedAnalysis.pattern
-    };
+    if (processingType === 'drums') {
+      console.log('[Audio Processor] Generating drum audio...');
+      const drumAudioBuffer = await generateDrumAudio(parsedAnalysis.pattern, parsedAnalysis.tempo);
+      
+      // Create a blob from the buffer
+      const drumAudioBlob = new Blob([drumAudioBuffer], { type: 'audio/wav' });
+      
+      // Upload to Supabase storage
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      
+      const fileName = `processed-${processingType}-${crypto.randomUUID()}.mp3`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('processed_audio')
+        .upload(fileName, drumAudioBlob);
+        
+      if (uploadError) {
+        throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
+      }
+      
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('processed_audio')
+        .getPublicUrl(fileName);
+
+      return {
+        type: processingType,
+        url: publicUrl,
+        processed: true,
+        analysis: analysisContent,
+        transcription: transcription.text,
+        audioBuffer: drumAudioBuffer,
+        musicalAnalysis: parsedAnalysis,
+        tempo: parsedAnalysis.tempo,
+        timeSignature: parsedAnalysis.timeSignature,
+        patternData: parsedAnalysis.pattern
+      };
+    } else {
+      return {
+        type: processingType,
+        url: audioUrl,
+        processed: true,
+        analysis: analysisContent,
+        transcription: transcription.text,
+        audioBuffer: audioBuffer,
+        musicalAnalysis: parsedAnalysis,
+        tempo: parsedAnalysis.tempo,
+        timeSignature: parsedAnalysis.timeSignature,
+        patternData: parsedAnalysis.pattern
+      };
+    }
 
   } catch (error) {
     console.error('[Audio Processor] Error:', error);
