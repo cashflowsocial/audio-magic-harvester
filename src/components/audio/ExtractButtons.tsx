@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Drumstick, Music, Guitar, Play, Loader2, StopCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -25,15 +26,17 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       const { data, error } = await supabase
         .from('processed_tracks')
         .select('*')
-        .eq('recording_id', recordingId);
+        .eq('recording_id', recordingId)
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
       return data || [];
     },
     enabled: !!recordingId,
     refetchInterval: (data) => {
-      if (!Array.isArray(data)) return false;
-      return data?.some(track => track.processing_status === 'processing') ? 3000 : false;
+      // Only refetch if there are any tracks in 'processing' status
+      const hasProcessingTracks = data?.some(track => track.processing_status === 'processing');
+      return hasProcessingTracks ? 3000 : false;
     }
   });
 
@@ -41,15 +44,23 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     if (!recordingId) return;
 
     try {
-      const track = processedTracks?.find(t => t.processing_type === type);
-      if (track) {
-        await supabase
-          .from('processed_tracks')
-          .update({ 
-            processing_status: 'failed',
-            error_message: 'Processing cancelled by user'
-          })
-          .eq('id', track.id);
+      // Find all processing tracks of this type for this recording
+      const tracksToCancel = processedTracks?.filter(t => 
+        t.processing_type === type && 
+        t.processing_status === 'processing'
+      );
+
+      if (tracksToCancel && tracksToCancel.length > 0) {
+        // Cancel all processing tracks of this type
+        for (const track of tracksToCancel) {
+          await supabase
+            .from('processed_tracks')
+            .update({ 
+              processing_status: 'failed',
+              error_message: 'Processing cancelled by user'
+            })
+            .eq('id', track.id);
+        }
 
         await refetch();
         setProcessingType(null);
@@ -73,6 +84,15 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
 
   const handleExtract = async (type: 'drums' | 'melody' | 'instrumentation') => {
     if (!recordingId) return;
+
+    // First, cancel any existing processing of this type
+    const existingProcessing = processedTracks?.find(
+      t => t.processing_type === type && t.processing_status === 'processing'
+    );
+    
+    if (existingProcessing) {
+      await handleCancel(type);
+    }
 
     setProcessingType(type);
     setStartTimes(prev => ({...prev, [type]: Date.now()}));
