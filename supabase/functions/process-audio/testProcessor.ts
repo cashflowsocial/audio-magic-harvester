@@ -8,25 +8,27 @@ export async function testHuggingFaceConnection(hf: HfInference) {
       throw new Error('Hugging Face client not initialized');
     }
 
-    const token = Deno.env.get('HUGGING_FACE_API_KEY');
-    if (!token) {
-      throw new Error('API token not found');
-    }
-
-    // Test API connection
+    // Test API connection with a simple text generation task
     console.log('Testing API connection...');
-    const response = await hf.textGeneration({
-      inputs: "Hello, how are you?",
-      model: "gpt2",
-      max_new_tokens: 5
-    });
+    try {
+      await hf.textGeneration({
+        model: "gpt2",
+        inputs: "Hello world",
+        parameters: {
+          max_new_tokens: 5,
+          return_full_text: false
+        }
+      });
 
-    console.log('Response from Hugging Face:', response);
-
-    return {
-      success: true,
-      message: 'Successfully connected to Hugging Face API'
-    };
+      return {
+        success: true,
+        message: 'Successfully connected to Hugging Face API'
+      };
+      
+    } catch (apiError) {
+      console.error('API Error:', apiError);
+      throw new Error(`API request failed: ${apiError.message}`);
+    }
 
   } catch (error) {
     console.error('Detailed error:', {

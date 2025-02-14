@@ -17,7 +17,8 @@ serve(async (req) => {
     }
 
     console.log('Initializing Hugging Face client...');
-    const hf = new HfInference(token);
+    // Initialize with proper token string
+    const hf = new HfInference(String(token));
 
     // Test the connection
     console.log('Testing Hugging Face connection...');
@@ -30,9 +31,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(testResult),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
