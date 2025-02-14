@@ -193,7 +193,7 @@ export const processAudio = async (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4o',  // Fixed model name for the latest version
         messages: [
           {
             role: 'system',
