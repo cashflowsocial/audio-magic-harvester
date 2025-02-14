@@ -1,4 +1,3 @@
-
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
@@ -133,7 +132,7 @@ export const processAudio = async (
     const transcription = await whisperResponse.json();
     console.log('[Audio Processor] Transcription result:', transcription);
 
-    // Analyze with GPT-4
+    // Analyze with GPT-4o-mini
     console.log('[Audio Processor] Generating musical analysis...');
     const systemPrompt = processingType === 'drums' ? 
       `You are a drum pattern expert that can interpret beatbox sounds and vocal drum imitations into precise drum patterns.
@@ -194,7 +193,7 @@ export const processAudio = async (
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4',  // Fixed model name
+        model: 'gpt-4o-mini',  // Using the recommended fast and cheap model
         messages: [
           {
             role: 'system',
