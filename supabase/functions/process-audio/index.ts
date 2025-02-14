@@ -17,16 +17,15 @@ serve(async (req) => {
 
     console.log('Initializing Hugging Face client...');
     
-    // Initialize with custom fetch configuration
+    // Initialize with simpler fetch configuration
     const hf = new HfInference(token, {
       fetch: (url: string, options: RequestInit = {}) => {
-        // Ensure headers are properly formatted
-        const headers = new Headers(options.headers || {});
-        headers.set('Authorization', `Bearer ${token}`);
-        
         return fetch(url, {
           ...options,
-          headers
+          headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${token}`
+          }
         });
       }
     });
