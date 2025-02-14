@@ -8,7 +8,7 @@ export interface ProcessedTrack {
   musical_analysis?: any;
   tempo?: number;
   time_signature?: string;
-  pattern_data?: Record<string, number[]>;
+  pattern_data?: Record<string, number[]> | null;
   error_message?: string;
   created_at: string;
   midi_data?: {
@@ -19,19 +19,17 @@ export interface ProcessedTrack {
       velocity: number;
     }>;
     instrument: string;
-  };
+  } | null;
   freesound_samples?: Record<string, {
     id: string;
     name: string;
     url: string;
-  }>;
+  }> | null;
   playback_status?: 'pending' | 'loading_samples' | 'ready' | 'error';
 }
 
 export interface DrumPattern {
   tempo: number;
   timeSignature: string;
-  pattern: {
-    [key: string]: number[];
-  };
+  pattern: Record<string, number[]>;
 }

@@ -31,14 +31,24 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
 
         if (error) throw error;
 
-        if (!data.pattern_data || !data.tempo || !data.freesound_samples) {
+        // Validate the required data
+        if (!data.pattern_data || !data.tempo || !data.freesound_samples || 
+            typeof data.pattern_data !== 'object' || typeof data.tempo !== 'number') {
           throw new Error('Missing required pattern data or Freesound samples');
         }
 
-        // Set the pattern
+        // Validate pattern_data structure
+        const validatedPattern: Record<string, number[]> = {};
+        for (const [key, value] of Object.entries(data.pattern_data)) {
+          if (Array.isArray(value) && value.every(num => typeof num === 'number')) {
+            validatedPattern[key] = value;
+          }
+        }
+
+        // Set the pattern with validated data
         setPattern({
-          pattern: data.pattern_data,
-          tempo: Number(data.tempo),
+          pattern: validatedPattern,
+          tempo: data.tempo,
           timeSignature: data.time_signature || '4/4'
         });
 
@@ -48,18 +58,20 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
 
         // Load Freesound samples
         for (const [instrumentType, sample] of Object.entries(data.freesound_samples)) {
-          try {
-            const response = await fetch(sample.url);
-            const arrayBuffer = await response.arrayBuffer();
-            const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
-            loadedBuffers[instrumentType] = audioBuffer;
-          } catch (err) {
-            console.error(`Error loading sample for ${instrumentType}:`, err);
-            toast({
-              title: "Error",
-              description: `Failed to load ${instrumentType} sample`,
-              variant: "destructive",
-            });
+          if (typeof sample === 'object' && sample && 'url' in sample) {
+            try {
+              const response = await fetch(sample.url);
+              const arrayBuffer = await response.arrayBuffer();
+              const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+              loadedBuffers[instrumentType] = audioBuffer;
+            } catch (err) {
+              console.error(`Error loading sample for ${instrumentType}:`, err);
+              toast({
+                title: "Error",
+                description: `Failed to load ${instrumentType} sample`,
+                variant: "destructive",
+              });
+            }
           }
         }
 

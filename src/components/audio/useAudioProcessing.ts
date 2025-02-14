@@ -22,7 +22,16 @@ export const useAudioProcessing = (recordingId: string | null) => {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as ProcessedTrack[] || [];
+
+      // Transform the data to match ProcessedTrack type
+      const transformedData = (data || []).map(track => ({
+        ...track,
+        midi_data: track.midi_data as ProcessedTrack['midi_data'],
+        pattern_data: track.pattern_data as ProcessedTrack['pattern_data'],
+        freesound_samples: track.freesound_samples as ProcessedTrack['freesound_samples']
+      }));
+
+      return transformedData as ProcessedTrack[];
     },
     enabled: !!recordingId,
     refetchInterval: (query) => {
