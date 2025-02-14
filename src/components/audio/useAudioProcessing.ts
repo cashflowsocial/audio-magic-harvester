@@ -25,7 +25,8 @@ export const useAudioProcessing = (recordingId: string | null) => {
       return data as ProcessedTrack[] || [];
     },
     enabled: !!recordingId,
-    refetchInterval: (data: ProcessedTrack[] | undefined) => {
+    refetchInterval: (query) => {
+      const data = query.state.data as ProcessedTrack[] | undefined;
       if (!Array.isArray(data)) return false;
       const hasProcessingTracks = data.some(track => track.processing_status === 'processing');
       return hasProcessingTracks ? 3000 : false;
