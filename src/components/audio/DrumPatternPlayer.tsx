@@ -4,6 +4,18 @@ import { Button } from "@/components/ui/button";
 import { Play, Pause, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
+interface DrumPattern {
+  pattern: {
+    kick: number[];
+    snare: number[];
+    hihat: number[];
+    crash: number[];
+    [key: string]: number[]; // Allow for other drum types
+  };
+  tempo: number;
+  timeSignature: string;
+}
+
 interface DrumPatternPlayerProps {
   processedTrackId: string;
 }
@@ -11,7 +23,7 @@ interface DrumPatternPlayerProps {
 export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [pattern, setPattern] = useState<any>(null);
+  const [pattern, setPattern] = useState<DrumPattern | null>(null);
   const [drumSamples, setDrumSamples] = useState<Record<string, AudioBuffer>>({});
   const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -116,15 +128,21 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
     const beatDuration = 60 / pattern.tempo;
 
     // Schedule all drum hits
-    Object.entries(pattern.pattern).forEach(([type, beats]: [string, number[]]) => {
-      beats.forEach((beat) => {
-        const time = startTime + (beat - 1) * beatDuration;
-        playDrumSound(type, time);
-      });
+    Object.entries(pattern.pattern).forEach(([type, beats]) => {
+      // Ensure beats is an array of numbers
+      if (Array.isArray(beats)) {
+        beats.forEach((beat) => {
+          if (typeof beat === 'number') {
+            const time = startTime + (beat - 1) * beatDuration;
+            playDrumSound(type, time);
+          }
+        });
+      }
     });
 
     // Calculate pattern duration and stop playing after it's done
-    const maxBeat = Math.max(...Object.values(pattern.pattern).flat());
+    const allBeats = Object.values(pattern.pattern).flat();
+    const maxBeat = Math.max(...allBeats.filter((beat): beat is number => typeof beat === 'number'));
     const patternDuration = (maxBeat - 1) * beatDuration * 1000;
 
     timerRef.current = window.setTimeout(() => {
