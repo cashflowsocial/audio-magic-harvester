@@ -3,27 +3,24 @@ import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4';
 
 export const testHuggingFaceConnection = async (hf: HfInference): Promise<{ success: boolean, message: string }> => {
   try {
-    // Create a minimal audio test blob (1 second of silence)
-    const sampleRate = 44100;
-    const duration = 1; // 1 second
-    const audioData = new Float32Array(sampleRate * duration);
-    const audioBlob = new Blob([audioData], { type: 'audio/wav' });
+    console.log('Starting Hugging Face connection test...');
 
-    console.log('Starting test connection with blob:', {
-      size: audioBlob.size,
-      type: audioBlob.type
+    // First try to check the token validity with a simple text classification
+    const result = await hf.textClassification({
+      model: 'SamLowe/roberta-base-go_emotions',
+      inputs: 'Test message'
     });
 
-    // Try the simplest possible classification task
-    const result = await hf.audioClassification({
-      data: audioBlob,
-      model: 'antonibigata/drummids'
-    });
+    console.log('Initial token test succeeded:', result);
 
-    console.log('Test connection succeeded:', result);
+    // Now test audio model specifically
+    console.log('Testing audio model access...');
+    const modelInfo = await hf.getModelInfo('facebook/demucs');
+    console.log('Audio model info:', modelInfo);
+
     return {
       success: true,
-      message: 'Successfully connected to Hugging Face API'
+      message: 'Successfully connected to Hugging Face API and verified audio model access'
     };
 
   } catch (error) {
@@ -32,6 +29,21 @@ export const testHuggingFaceConnection = async (hf: HfInference): Promise<{ succ
       stack: error.stack,
       type: error.constructor.name
     });
+    
+    // Provide more specific error messages
+    if (error.message.includes('unauthorized')) {
+      return {
+        success: false,
+        message: 'Invalid or missing Hugging Face API token. Please check your token in Supabase Edge Function secrets.'
+      };
+    }
+    
+    if (error.message.includes('not found')) {
+      return {
+        success: false,
+        message: 'Could not access required models. Please ensure you have access to the required models.'
+      };
+    }
     
     return {
       success: false,

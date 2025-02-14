@@ -1,6 +1,5 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4'
 import { corsHeaders } from './config.ts'
 import { testHuggingFaceConnection } from './testProcessor.ts'
@@ -11,14 +10,21 @@ serve(async (req) => {
   }
 
   try {
-    const hf = new HfInference(Deno.env.get('HUGGING_FACE_ACCESS_TOKEN'))
+    const token = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
+    if (!token) {
+      throw new Error('Hugging Face API token not configured');
+    }
 
-    // Test the connection first
-    const testResult = await testHuggingFaceConnection(hf)
-    console.log('Connection test result:', testResult)
+    console.log('Initializing Hugging Face client...');
+    const hf = new HfInference(token);
+
+    // Test the connection
+    console.log('Testing Hugging Face connection...');
+    const testResult = await testHuggingFaceConnection(hf);
+    console.log('Connection test result:', testResult);
 
     if (!testResult.success) {
-      throw new Error(testResult.message)
+      throw new Error(testResult.message);
     }
 
     return new Response(
@@ -29,13 +35,14 @@ serve(async (req) => {
           'Content-Type': 'application/json'
         }
       }
-    )
+    );
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error:', error);
     return new Response(
       JSON.stringify({
-        error: error.message
+        success: false,
+        message: error.message
       }),
       { 
         headers: { 
@@ -44,6 +51,6 @@ serve(async (req) => {
         },
         status: 500
       }
-    )
+    );
   }
-})
+});
