@@ -28,17 +28,10 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
         .eq('recording_id', recordingId);
       
       if (error) throw error;
-      return data;
+      return data || [];
     },
     enabled: !!recordingId,
-    refetchInterval: (data) => {
-      // If any track is processing, refetch every 5 seconds
-      const tracks = data || [];
-      if (tracks.some(track => track.processing_status === 'processing')) {
-        return 5000;
-      }
-      return false;
-    }
+    refetchInterval: 5000, // Simply poll every 5 seconds while processing
   });
 
   const handleExtract = async (type: 'drums' | 'melody' | 'instrumentation') => {
