@@ -19,27 +19,44 @@ const Auth = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    console.log("Attempting auth...", { isSignUp, email });
 
     try {
-      const { error } = isSignUp 
-        ? await supabase.auth.signUp({ email, password })
-        : await supabase.auth.signInWithPassword({ email, password });
-
-      if (error) throw error;
-
       if (isSignUp) {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        
+        console.log("Sign up response:", { data, error: signUpError });
+        
+        if (signUpError) throw signUpError;
+
         toast({
-          title: "Success!",
+          title: "Account created!",
           description: "Please check your email to verify your account.",
         });
       } else {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
+        console.log("Sign in response:", { data, error: signInError });
+        
+        if (signInError) throw signInError;
+
         navigate("/");
       }
     } catch (error) {
+      console.error("Auth error:", error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "An error occurred",
+        description: error instanceof Error ? error.message : "An error occurred during authentication",
       });
     } finally {
       setLoading(false);
@@ -79,6 +96,7 @@ const Auth = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="Enter your password"
+                minLength={6}
               />
             </div>
             <Button
