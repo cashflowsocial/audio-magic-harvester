@@ -33,7 +33,8 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     enabled: !!recordingId,
     refetchInterval: (data) => {
       // If any track is processing, refetch every 5 seconds
-      if (data?.some(track => track.processing_status === 'processing')) {
+      const tracks = data || [];
+      if (tracks.some(track => track.processing_status === 'processing')) {
         return 5000;
       }
       return false;
