@@ -1,6 +1,11 @@
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -122,27 +127,10 @@ export const processAudio = async (
       
       console.log('[Audio Processor] Test pattern:', pattern);
       
-      // Generate audio for the pattern at 120 BPM
-      const drumAudioBuffer = await generateDrumAudio(pattern, 120);
-      
-      // Create a blob from the buffer
-      const drumAudioBlob = new Blob([drumAudioBuffer], { type: 'audio/wav' });
-      
-      // Upload to Supabase storage
-      const fileName = `processed-${processingType}-${crypto.randomUUID()}.wav`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('processed_audio')
-        .upload(fileName, drumAudioBlob);
-        
-      if (uploadError) {
-        throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
-      }
-      
-      // Get the public URL
+      // For testing, we'll just return the URL of an existing drum sample
       const { data: { publicUrl } } = supabase.storage
-        .from('processed_audio')
-        .getPublicUrl(fileName);
+        .from('drum_samples')
+        .getPublicUrl('kick.mp3');
 
       return {
         type: processingType,
@@ -150,7 +138,6 @@ export const processAudio = async (
         processed: true,
         analysis: JSON.stringify(pattern),
         transcription: "Test drum pattern",
-        audioBuffer: drumAudioBuffer,
         musicalAnalysis: { tempo: 120, timeSignature: "4/4", pattern },
         tempo: 120,
         timeSignature: "4/4",
