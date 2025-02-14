@@ -4,6 +4,9 @@ import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4'
 import { corsHeaders } from './config.ts'
 import { testHuggingFaceConnection } from './testProcessor.ts'
 
+// Add fetch to global scope for Hugging Face client
+const fetch = globalThis.fetch.bind(globalThis);
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -16,7 +19,7 @@ serve(async (req) => {
     }
 
     console.log('Initializing Hugging Face client...');
-    const hf = new HfInference(token);
+    const hf = new HfInference(token, { fetch });
 
     // Test the connection
     console.log('Testing Hugging Face connection...');
