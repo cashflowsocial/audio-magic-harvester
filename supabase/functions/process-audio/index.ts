@@ -10,7 +10,7 @@ serve(async (req) => {
   }
 
   try {
-    const token = Deno.env.get('HUGGING_FACE_ACCESS_TOKEN');
+    const token = Deno.env.get('HUGGING_FACE_API_KEY');
     if (!token) {
       throw new Error('Hugging Face API token not configured');
     }
