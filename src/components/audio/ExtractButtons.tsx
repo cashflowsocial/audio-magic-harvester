@@ -1,6 +1,6 @@
 
 import { Button } from "@/components/ui/button";
-import { Drumstick, Music, Guitar, Play, Loader2 } from "lucide-react";
+import { Drumstick, Music, Guitar, Play, Loader2, StopCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
   const { toast } = useToast();
   const [playingType, setPlayingType] = useState<string | null>(null);
   const [processingType, setProcessingType] = useState<string | null>(null);
+  const [startTimes, setStartTimes] = useState<Record<string, number>>({});
 
   // Query processed tracks
   const { data: processedTracks, isLoading, refetch } = useQuery({
@@ -31,13 +32,57 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       return data || [];
     },
     enabled: !!recordingId,
-    refetchInterval: 5000, // Simply poll every 5 seconds while processing
+    refetchInterval: (data) => {
+      // Only poll if there are tracks being processed
+      const tracks = data as any[] || [];
+      if (tracks.some(track => track.processing_status === 'processing')) {
+        return 3000; // Poll every 3 seconds instead of 5
+      }
+      return false;
+    }
   });
+
+  const handleCancel = async (type: string) => {
+    if (!recordingId) return;
+
+    try {
+      // Update the track status to 'failed' to stop processing
+      const track = processedTracks?.find(t => t.processing_type === type);
+      if (track) {
+        await supabase
+          .from('processed_tracks')
+          .update({ 
+            processing_status: 'failed',
+            error_message: 'Processing cancelled by user'
+          })
+          .eq('id', track.id);
+
+        await refetch();
+        setProcessingType(null);
+        delete startTimes[type];
+        setStartTimes({...startTimes});
+
+        toast({
+          title: "Processing Cancelled",
+          description: `Cancelled ${type} extraction.`,
+        });
+      }
+    } catch (error) {
+      console.error('Error cancelling processing:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to cancel processing. Please try again.",
+      });
+    }
+  };
 
   const handleExtract = async (type: 'drums' | 'melody' | 'instrumentation') => {
     if (!recordingId) return;
 
     setProcessingType(type);
+    setStartTimes(prev => ({...prev, [type]: Date.now()}));
+    
     toast({
       title: "Processing Started",
       description: `Starting ${type} extraction...`,
@@ -57,7 +102,7 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       }
 
       console.log(`Processing response:`, response);
-      await refetch(); // Refetch to get the latest status
+      await refetch();
 
       toast({
         title: "Processing Complete",
@@ -74,6 +119,8 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       });
     } finally {
       setProcessingType(null);
+      delete startTimes[type];
+      setStartTimes({...startTimes});
     }
   };
 
@@ -81,9 +128,19 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     return processedTracks?.find(track => track.processing_type === type);
   };
 
+  const getProcessingTime = (type: string) => {
+    const startTime = startTimes[type];
+    if (!startTime) return '';
+    
+    const seconds = Math.floor((Date.now() - startTime) / 1000);
+    return `${seconds}s`;
+  };
+
   const renderExtractButton = (type: 'drums' | 'melody' | 'instrumentation') => {
     const track = getTrackByType(type);
     const isProcessing = processingType === type || track?.processing_status === 'processing';
+    const processingTime = getProcessingTime(type);
+    
     const icon = {
       drums: <Drumstick className="h-4 w-4" />,
       melody: <Music className="h-4 w-4" />,
@@ -92,15 +149,27 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
 
     return (
       <div className="space-y-2">
-        <Button
-          onClick={() => handleExtract(type)}
-          disabled={disabled || isProcessing}
-          className="flex items-center gap-2 w-full"
-          variant="outline"
-        >
-          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-          {isProcessing ? `Processing ${type}...` : `Extract & Create ${type}`}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => handleExtract(type)}
+            disabled={disabled || isProcessing}
+            className="flex items-center gap-2 flex-1"
+            variant="outline"
+          >
+            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
+            {isProcessing ? `Processing ${type}... ${processingTime}` : `Extract & Create ${type}`}
+          </Button>
+          {isProcessing && (
+            <Button
+              onClick={() => handleCancel(type)}
+              variant="destructive"
+              size="icon"
+              className="shrink-0"
+            >
+              <StopCircle className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
         {track?.processed_audio_url && (
           <PlaybackControl
             audioUrl={track.processed_audio_url}
