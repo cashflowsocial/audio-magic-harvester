@@ -35,19 +35,10 @@ export const getDrumSampleUrls = async (kitId: string) => {
     return {};
   }
 
+  // Since we're now using direct URLs in storage_path, we can return them directly
   return samples.reduce((urls: Record<string, string>, sample) => {
-    const { data } = supabase.storage
-      .from('drum_kit_samples')
-      .getPublicUrl(sample.storage_path);
-    
-    urls[sample.sample_type] = data.publicUrl;
+    urls[sample.sample_type] = sample.storage_path;
     return urls;
   }, {});
 };
 
-// Usage example:
-// const kits = await getDrumKits();
-// const urls = await getDrumSampleUrls(kits[0].id);
-// console.log(urls.kick); // URL to kick.mp3
-// console.log(urls.snare); // URL to snare.mp3
-// etc.

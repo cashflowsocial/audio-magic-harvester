@@ -84,3 +84,20 @@ export const markProcessingAsFailed = async (
     throw new Error(`Error marking processing as failed: ${error.message}`)
   }
 }
+
+// Add function to get drum kit samples
+export const getDrumKitSamples = async (supabaseClient: any) => {
+  console.log('[DB] Fetching drum kit samples')
+  const { data, error } = await supabaseClient
+    .from('drum_kit_samples')
+    .select('*')
+    .order('created_at', { ascending: false })
+  
+  if (error) {
+    console.error('[DB] Error fetching drum kit samples:', error)
+    throw new Error(`Error fetching drum kit samples: ${error.message}`)
+  }
+  
+  return data
+}
+
