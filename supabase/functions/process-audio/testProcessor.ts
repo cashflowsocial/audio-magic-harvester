@@ -3,19 +3,23 @@ import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4'
 
 export async function testHuggingFaceConnection(hf: HfInference) {
   try {
-    // First validate the client is properly initialized
+    // Basic validation
     if (!hf) {
       throw new Error('Hugging Face client not initialized');
     }
 
-    // Test with a simple text classification task
-    console.log('Testing basic API connectivity...');
-    const result = await hf.textClassification({
+    // Try a simple inference task
+    console.log('Testing API connection with basic inference...');
+    const response = await hf.textClassification({
       model: 'distilbert-base-uncased-finetuned-sst-2-english',
-      inputs: 'Test message'
+      inputs: 'Testing connection'
     });
-    
-    console.log('Basic API test succeeded:', result);
+
+    console.log('Response from Hugging Face:', response);
+
+    if (!response) {
+      throw new Error('No response received from Hugging Face API');
+    }
 
     return {
       success: true,
@@ -23,15 +27,17 @@ export async function testHuggingFaceConnection(hf: HfInference) {
     };
 
   } catch (error) {
-    console.error('Test connection error:', {
+    console.error('Detailed error:', {
       name: error.name,
-      message: error.message
+      message: error.message,
+      stack: error.stack
     });
 
-    if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+    // Check for specific error types
+    if (error.message?.includes('401')) {
       return {
         success: false,
-        message: 'Invalid or expired Hugging Face API token. Please check your token.'
+        message: 'Authentication failed. Please check your API token.'
       };
     }
 
