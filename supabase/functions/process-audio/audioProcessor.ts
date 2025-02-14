@@ -44,6 +44,37 @@ export const processAudio = async (
 
     // Analyze with GPT-4
     console.log('[Audio Processor] Generating musical analysis...');
+    const systemPrompt = processingType === 'drums' ? 
+      `You are a drum pattern expert. Analyze the given beatbox sounds and convert them into a precise drum pattern with:
+      1. Tempo (BPM)
+      2. Time signature
+      3. Exact placement of:
+         - Kick drum (usually "boom", "b", "puh")
+         - Snare drum (usually "psh", "ka", "ts")
+         - Hi-hat (usually "ts", "ch", "tss")
+         - Cymbals and other percussion
+      4. Any variations or fills
+      Return a valid JSON object with these exact fields and nothing else:
+      {
+        "tempo": number,
+        "timeSignature": string,
+        "pattern": {
+          "kick": number[],
+          "snare": number[],
+          "hihat": number[],
+          "crash": number[]
+        }
+      }` 
+      : `You are a musical expert. Analyze the given text and extract ${processingType} patterns. Return a valid JSON object with these exact fields and nothing else:
+      {
+        "tempo": number,
+        "timeSignature": string,
+        "pattern": {
+          "notes": number[],
+          "durations": number[]
+        }
+      }`;
+
     const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -55,28 +86,7 @@ export const processAudio = async (
         messages: [
           {
             role: 'system',
-            content: processingType === 'drums' ? 
-              `You are a drum pattern expert. Analyze the given beatbox sounds and convert them into a precise drum pattern with:
-              1. Tempo (BPM)
-              2. Time signature
-              3. Exact placement of:
-                 - Kick drum (usually "boom", "b", "puh")
-                 - Snare drum (usually "psh", "ka", "ts")
-                 - Hi-hat (usually "ts", "ch", "tss")
-                 - Cymbals and other percussion
-              4. Any variations or fills
-              Return a JSON object with these fields:
-              {
-                "tempo": number,
-                "timeSignature": string,
-                "pattern": {
-                  "kick": number[],
-                  "snare": number[],
-                  "hihat": number[],
-                  "crash": number[]
-                }
-              }` 
-              : `You are a musical expert. Analyze the given text and extract ${processingType} patterns.`
+            content: systemPrompt
           },
           {
             role: 'user',
@@ -96,23 +106,26 @@ export const processAudio = async (
     const analysis = await gptResponse.json();
     console.log('[Audio Processor] Musical analysis:', analysis);
 
-    // Create public URL for the processed audio
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const analysisContent = analysis.choices[0].message.content;
+    let parsedAnalysis;
+    try {
+      parsedAnalysis = JSON.parse(analysisContent);
+    } catch (error) {
+      console.error('[Audio Processor] Failed to parse analysis JSON:', error);
+      throw new Error('Failed to parse musical analysis output');
+    }
 
     return {
       type: processingType,
       url: audioUrl, // This will be updated with the actual processed audio URL
       processed: true,
-      analysis: analysis.choices[0].message.content,
+      analysis: analysisContent,
       transcription: transcription.text,
       audioBuffer: audioBuffer,
-      musicalAnalysis: analysis.choices[0].message.content,
-      tempo: JSON.parse(analysis.choices[0].message.content).tempo,
-      timeSignature: JSON.parse(analysis.choices[0].message.content).timeSignature,
-      patternData: JSON.parse(analysis.choices[0].message.content).pattern
+      musicalAnalysis: parsedAnalysis,
+      tempo: parsedAnalysis.tempo,
+      timeSignature: parsedAnalysis.timeSignature,
+      patternData: parsedAnalysis.pattern
     };
 
   } catch (error) {
@@ -120,4 +133,3 @@ export const processAudio = async (
     throw error;
   }
 };
-
