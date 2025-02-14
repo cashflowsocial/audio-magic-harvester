@@ -8,18 +8,20 @@ export async function testHuggingFaceConnection(hf: HfInference) {
       throw new Error('Hugging Face client not initialized');
     }
 
-    // Try a simple inference task
-    console.log('Testing API connection with basic inference...');
-    const response = await hf.textClassification({
-      model: 'distilbert-base-uncased-finetuned-sst-2-english',
-      inputs: 'Testing connection'
+    // Try a simpler text classification task
+    console.log('Testing API connection...');
+    const response = await fetch('https://api-inference.huggingface.co/status', {
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('HUGGING_FACE_API_KEY')}`,
+      },
     });
 
-    console.log('Response from Hugging Face:', response);
-
-    if (!response) {
-      throw new Error('No response received from Hugging Face API');
+    if (!response.ok) {
+      throw new Error(`API responded with status ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log('Response from Hugging Face:', data);
 
     return {
       success: true,
@@ -32,14 +34,6 @@ export async function testHuggingFaceConnection(hf: HfInference) {
       message: error.message,
       stack: error.stack
     });
-
-    // Check for specific error types
-    if (error.message?.includes('401')) {
-      return {
-        success: false,
-        message: 'Authentication failed. Please check your API token.'
-      };
-    }
 
     return {
       success: false,
