@@ -41,7 +41,6 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     if (!recordingId) return;
 
     try {
-      // Update the track status to 'failed' to stop processing
       const track = processedTracks?.find(t => t.processing_type === type);
       if (track) {
         await supabase
@@ -165,7 +164,7 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
             </Button>
           )}
         </div>
-        {track?.processed_audio_url && (
+        {track?.processed_audio_url && track.processing_status === 'completed' && (
           <PlaybackControl
             audioUrl={track.processed_audio_url}
             isPlaying={playingType === type}
