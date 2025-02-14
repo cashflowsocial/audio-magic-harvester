@@ -5,7 +5,8 @@ export type ProcessingResult = {
   type: ProcessingType;
   url: string;
   processed: boolean;
-  classification?: any;
+  analysis?: string;
+  transcription?: string;
 };
 
 export type AudioProcessingRequest = {
