@@ -1,17 +1,27 @@
+
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
-const generateDrumAudio = async (pattern: any, tempo: number): Promise<ArrayBuffer> => {
-  // Download the drum samples
-  const kickResponse = await fetch('https://cdn.lovable.dev/drums/kick.mp3');
-  const snareResponse = await fetch('https://cdn.lovable.dev/drums/snare.mp3');
-  const hihatResponse = await fetch('https://cdn.lovable.dev/drums/hihat.mp3');
-  const crashResponse = await fetch('https://cdn.lovable.dev/drums/crash.mp3');
+const supabase = createClient(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+);
 
-  const kickBuffer = await kickResponse.arrayBuffer();
-  const snareBuffer = await snareResponse.arrayBuffer();
-  const hihatBuffer = await hihatResponse.arrayBuffer();
-  const crashBuffer = await crashResponse.arrayBuffer();
+const generateDrumAudio = async (pattern: any, tempo: number): Promise<ArrayBuffer> => {
+  // Download the drum samples from Supabase storage
+  const { data: kickData } = await supabase.storage.from('drum_samples').download('kick.mp3');
+  const { data: snareData } = await supabase.storage.from('drum_samples').download('snare.mp3');
+  const { data: hihatData } = await supabase.storage.from('drum_samples').download('hihat.mp3');
+  const { data: crashData } = await supabase.storage.from('drum_samples').download('crash.mp3');
+
+  if (!kickData || !snareData || !hihatData || !crashData) {
+    throw new Error('Failed to download drum samples from storage');
+  }
+
+  const kickBuffer = await kickData.arrayBuffer();
+  const snareBuffer = await snareData.arrayBuffer();
+  const hihatBuffer = await hihatData.arrayBuffer();
+  const crashBuffer = await crashData.arrayBuffer();
 
   // Create AudioContext
   const audioContext = new AudioContext();
