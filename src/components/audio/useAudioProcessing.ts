@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -110,6 +109,12 @@ export const useAudioProcessing = (recordingId: string | null) => {
         title: "Processing Complete",
         description: `Successfully extracted ${type}!`,
       });
+
+      // Store the MIDI pattern data
+      if (response.data.midiPattern) {
+        console.log('MIDI Pattern:', response.data.midiPattern);
+        // TODO: Use this data to play back using Freesound samples
+      }
 
       return response.data;
     } catch (error) {

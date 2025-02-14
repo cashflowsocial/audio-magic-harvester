@@ -1,10 +1,12 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { ProcessingType, ProcessingResult } from './types.ts';
+import { ProcessingType, ProcessingResult, DrumPattern } from './types.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const freesoundClientId = Deno.env.get('FREESOUND_CLIENT_ID');
+const freesoundClientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,9 +20,37 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt } = await req.json();
+    const { recordingId, processingType } = await req.json();
+
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Get the recording URL
+    const { data: recording, error: recordingError } = await supabase
+      .from('recordings')
+      .select('*')
+      .eq('id', recordingId)
+      .single();
+
+    if (recordingError || !recording) {
+      throw new Error('Recording not found');
+    }
+
+    // Get the public URL for the recording
+    const { data: { publicUrl } } = await supabase.storage
+      .from('recordings')
+      .getPublicUrl(recording.filename);
 
     // First, transcribe the audio using Whisper
+    const audioResponse = await fetch(publicUrl);
+    const audioBlob = await audioResponse.blob();
+    const formData = new FormData();
+    formData.append('file', audioBlob);
+    formData.append('model', 'whisper-1');
+
     const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
@@ -92,39 +122,36 @@ serve(async (req) => {
     const analysis = await gptResponse.json();
     console.log('[Audio Processor] Pattern analysis:', analysis);
 
-    const parsedAnalysis = JSON.parse(analysis.choices[0].message.content);
+    const pattern = JSON.parse(analysis.choices[0].message.content) as DrumPattern;
 
-    // Generate the drum audio using the pattern
-    const drumAudioBuffer = await generateDrumAudio(parsedAnalysis.pattern, parsedAnalysis.tempo);
-    const drumAudioBlob = new Blob([drumAudioBuffer], { type: 'audio/wav' });
+    // Save the MIDI pattern
+    const { data: midiPattern, error: midiError } = await supabase
+      .from('midi_patterns')
+      .insert({
+        recording_id: recordingId,
+        pattern_data: pattern.pattern,
+        tempo: pattern.tempo,
+        time_signature: pattern.timeSignature,
+        freesound_samples: {
+          kick: "667", // Default Freesound IDs for our drum kit
+          snare: "668",
+          hihat: "669",
+          crash: "670"
+        }
+      })
+      .select()
+      .single();
 
-    // Upload to Supabase storage
-    const fileName = `processed-drums-${crypto.randomUUID()}.mp3`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('processed_audio')
-      .upload(fileName, drumAudioBlob);
-
-    if (uploadError) {
-      throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
+    if (midiError) {
+      throw new Error(`Failed to save MIDI pattern: ${midiError.message}`);
     }
-
-    // Get the public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('processed_audio')
-      .getPublicUrl(fileName);
 
     return new Response(
       JSON.stringify({
-        type: 'drums',
-        url: publicUrl,
-        processed: true,
-        analysis: analysis.choices[0].message.content,
+        success: true,
+        midiPattern,
         transcription: transcription.text,
-        audioBuffer: drumAudioBuffer,
-        musicalAnalysis: parsedAnalysis,
-        tempo: parsedAnalysis.tempo,
-        timeSignature: parsedAnalysis.timeSignature,
-        patternData: parsedAnalysis.pattern
+        analysis: pattern
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -140,99 +167,3 @@ serve(async (req) => {
     );
   }
 });
-
-// Helper function to generate drum audio from pattern
-const generateDrumAudio = async (pattern: any, tempo: number): Promise<ArrayBuffer> => {
-  // Download the drum samples from Supabase storage
-  const { data: kickData } = await supabase.storage.from('drum_samples').download('kick.mp3');
-  const { data: snareData } = await supabase.storage.from('drum_samples').download('snare.mp3');
-  const { data: hihatData } = await supabase.storage.from('drum_samples').download('hihat.mp3');
-  const { data: crashData } = await supabase.storage.from('drum_samples').download('crash.mp3');
-
-  if (!kickData || !snareData || !hihatData || !crashData) {
-    throw new Error('Failed to download drum samples from storage');
-  }
-
-  const kickBuffer = await kickData.arrayBuffer();
-  const snareBuffer = await snareData.arrayBuffer();
-  const hihatBuffer = await hihatData.arrayBuffer();
-  const crashBuffer = await crashData.arrayBuffer();
-
-  // Create AudioContext
-  const audioContext = new AudioContext();
-
-  // Create buffers for each drum sound
-  const kickAudioBuffer = await audioContext.decodeAudioData(kickBuffer);
-  const snareAudioBuffer = await audioContext.decodeAudioData(snareBuffer);
-  const hihatAudioBuffer = await audioContext.decodeAudioData(hihatBuffer);
-  const crashAudioBuffer = await audioContext.decodeAudioData(crashBuffer);
-
-  // Calculate beat duration in seconds
-  const beatDuration = 60 / tempo;
-  const totalBeats = Math.max(
-    ...Object.values(pattern).flat().map(beat => Math.ceil(beat))
-  );
-  const duration = totalBeats * beatDuration;
-
-  // Create an offline context for rendering
-  const offlineContext = new OfflineAudioContext(2, duration * audioContext.sampleRate, audioContext.sampleRate);
-
-  // Schedule drum hits
-  const scheduleDrumHits = (buffer: AudioBuffer, beats: number[]) => {
-    beats.forEach(beat => {
-      const source = offlineContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(offlineContext.destination);
-      source.start(beat * beatDuration);
-    });
-  };
-
-  // Schedule all drum parts
-  scheduleDrumHits(kickAudioBuffer, pattern.kick);
-  scheduleDrumHits(snareAudioBuffer, pattern.snare);
-  scheduleDrumHits(hihatAudioBuffer, pattern.hihat);
-  scheduleDrumHits(crashAudioBuffer, pattern.crash);
-
-  // Render audio
-  const renderedBuffer = await offlineContext.startRendering();
-
-  // Convert AudioBuffer to WAV
-  const numberOfChannels = renderedBuffer.numberOfChannels;
-  const length = renderedBuffer.length * numberOfChannels * 2;
-  const buffer = new ArrayBuffer(44 + length);
-  const view = new DataView(buffer);
-
-  // Write WAV header
-  const writeString = (offset: number, string: string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + length, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numberOfChannels, true);
-  view.setUint32(24, audioContext.sampleRate, true);
-  view.setUint32(28, audioContext.sampleRate * numberOfChannels * 2, true);
-  view.setUint16(32, numberOfChannels * 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, length, true);
-
-  // Write audio data
-  const offset = 44;
-  for (let i = 0; i < renderedBuffer.length; i++) {
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-      const sample = renderedBuffer.getChannelData(channel)[i];
-      const clipped = Math.max(-1, Math.min(1, sample));
-      const int16 = clipped < 0 ? clipped * 0x8000 : clipped * 0x7FFF;
-      view.setInt16(offset + (i * numberOfChannels + channel) * 2, int16, true);
-    }
-  }
-
-  return buffer;
-};

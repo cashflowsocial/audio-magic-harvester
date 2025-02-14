@@ -7,9 +7,19 @@ export interface ProcessingResult {
   processed: boolean;
   analysis: string;
   transcription: string;
-  audioBuffer?: ArrayBuffer;
   musicalAnalysis?: any;
   tempo?: number;
   timeSignature?: string;
   patternData?: any;
+}
+
+export interface DrumPattern {
+  tempo: number;
+  timeSignature: string;
+  pattern: {
+    kick: number[];
+    snare: number[];
+    hihat: number[];
+    crash: number[];
+  };
 }

@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Database } from "@/integrations/supabase/types";
 import { analyzeAudio, AudioFeatures } from "./audioAnalysis";
@@ -9,44 +8,20 @@ type RecordingWithUrl = Recording & { url: string };
 
 export const processAudio = async (audioBlob: Blob): Promise<Blob> => {
   try {
-    // Convert blob to AudioBuffer for analysis
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const audioContext = new AudioContext();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-    
-    // Analyze the audio to detect beats
-    const beatEvents = await analyzeBeatbox(audioBuffer);
-    console.log('Detected beat events:', beatEvents);
-    
-    // Create a new audio sequence with drum samples
-    const drumSequence = await createDrumSequence(beatEvents);
-    
-    // Convert back to blob
-    // Convert the AudioBuffer to a Blob
-    const offlineCtx = new OfflineAudioContext(drumSequence.numberOfChannels, drumSequence.length, drumSequence.sampleRate);
-    const bufferSource = offlineCtx.createBufferSource();
-    bufferSource.buffer = drumSequence;
-    bufferSource.connect(offlineCtx.destination);
-    bufferSource.start();
+    // Convert blob to base64
+    const reader = new FileReader();
+    const base64Promise = new Promise<string>((resolve) => {
+      reader.onloadend = () => {
+        const base64data = reader.result as string;
+        resolve(base64data.split(',')[1]); // Remove data URL prefix
+      };
+    });
+    reader.readAsDataURL(audioBlob);
+    const base64Audio = await base64Promise;
 
-    const renderedBuffer = await offlineCtx.startRendering();
-
-    // Convert AudioBuffer to Float32Array
-    const left = renderedBuffer.getChannelData(0);
-    const right = renderedBuffer.getChannelData(1);
-
-    // Interleave the left and right channels into a single array
-    const interleaved = new Float32Array(left.length + right.length);
-    for (let i = 0; i < left.length; i++) {
-        interleaved[i * 2] = left[i];
-        interleaved[i * 2 + 1] = right[i];
-    }
-
-    // Create a WAV file from the interleaved data
-    const wavData = createWavFile(interleaved, renderedBuffer.sampleRate);
-    const blob = new Blob([wavData], { type: 'audio/wav' });
-
-    return blob;
+    // We'll just return the original audio for now
+    // The actual processing will happen in the Edge Function
+    return audioBlob;
   } catch (error) {
     console.error('Error processing audio:', error);
     throw error;
