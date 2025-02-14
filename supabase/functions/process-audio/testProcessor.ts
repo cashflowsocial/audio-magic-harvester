@@ -13,22 +13,15 @@ export async function testHuggingFaceConnection(hf: HfInference) {
       throw new Error('API token not found');
     }
 
-    // Test API connection with proper header formatting
+    // Test API connection
     console.log('Testing API connection...');
-    const response = await fetch('https://api-inference.huggingface.co/status', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+    const response = await hf.textGeneration({
+      inputs: "Hello, how are you?",
+      model: "gpt2",
+      max_new_tokens: 5
     });
 
-    if (!response.ok) {
-      throw new Error(`API responded with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('Response from Hugging Face:', data);
+    console.log('Response from Hugging Face:', response);
 
     return {
       success: true,
