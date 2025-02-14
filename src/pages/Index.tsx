@@ -4,6 +4,7 @@ import { AudioLevel } from "@/components/audio/AudioLevel";
 import { RecordButton } from "@/components/audio/RecordButton";
 import { PlaybackControl } from "@/components/audio/PlaybackControl";
 import { ExtractButtons } from "@/components/audio/ExtractButtons";
+import { TestConnection } from "@/components/audio/TestConnection";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { NavMenu } from "@/components/NavMenu";
 
@@ -28,6 +29,8 @@ const Index = () => {
           <h1 className="text-2xl font-bold text-center mb-8">New Recording</h1>
           
           <div className="flex flex-col items-center gap-6">
+            <TestConnection />
+            
             <AudioLevel 
               level={audioLevel}
               isRecording={isRecording}
