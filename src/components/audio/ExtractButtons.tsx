@@ -24,14 +24,17 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       // Get the current session first
       const { data: { session } } = await supabase.auth.getSession();
       
+      if (!session) {
+        throw new Error('Authentication required. Please sign in.');
+      }
+
       const response = await supabase.functions.invoke('process-audio', {
         body: { 
           recordingId, 
           processingType: type 
         },
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token}`
+          Authorization: `Bearer ${session.access_token}`,
         }
       });
 
