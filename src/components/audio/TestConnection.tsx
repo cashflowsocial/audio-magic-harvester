@@ -14,15 +14,19 @@ export const TestConnection = () => {
     setTestResult(null);
     
     try {
+      console.log('Starting audio system test...');
       // Test audio context creation
       const audioContext = new AudioContext();
+      console.log('AudioContext created successfully');
       
       // Test analyzer node creation
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
+      console.log('Analyzer node created successfully');
       
       // Test microphone access
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Microphone access granted:', stream.active);
       
       setTestResult("success");
       toast({
@@ -48,22 +52,22 @@ export const TestConnection = () => {
       size="sm"
       onClick={testAudioSystem}
       disabled={testing}
-      className="w-full max-w-[200px]"
+      className="w-full max-w-[200px] gap-2 flex items-center justify-center"
     >
       {testing ? (
         <>
-          <Loader2 className="animate-spin" />
-          Testing...
+          <Loader2 className="animate-spin h-4 w-4" />
+          <span>Testing...</span>
         </>
       ) : testResult === "success" ? (
         <>
-          <Check className="text-green-500" />
-          System Ready
+          <Check className="h-4 w-4 text-green-500" />
+          <span>System Ready</span>
         </>
       ) : testResult === "error" ? (
         <>
-          <XCircle className="text-red-500" />
-          Check Settings
+          <XCircle className="h-4 w-4 text-red-500" />
+          <span>Check Settings</span>
         </>
       ) : (
         "Test Audio System"
