@@ -1,4 +1,3 @@
-
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
@@ -109,7 +108,56 @@ export const processAudio = async (
   try {
     console.log(`[Audio Processor] Starting ${processingType} processing for audio at ${audioUrl}`);
 
-    // Download the audio file
+    // For testing drum pattern generation
+    if (processingType === 'drums') {
+      console.log('[Audio Processor] Generating test drum pattern');
+      
+      // Create a simple test pattern (4 bars of 4/4 time)
+      const pattern = {
+        kick: [1, 1.75, 2.5, 3.25], // Kick on 1 and offbeats
+        snare: [2, 4], // Snare on 2 and 4
+        hihat: [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5], // Eighth note hi-hats
+        crash: [1] // Crash on 1
+      };
+      
+      console.log('[Audio Processor] Test pattern:', pattern);
+      
+      // Generate audio for the pattern at 120 BPM
+      const drumAudioBuffer = await generateDrumAudio(pattern, 120);
+      
+      // Create a blob from the buffer
+      const drumAudioBlob = new Blob([drumAudioBuffer], { type: 'audio/wav' });
+      
+      // Upload to Supabase storage
+      const fileName = `processed-${processingType}-${crypto.randomUUID()}.wav`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('processed_audio')
+        .upload(fileName, drumAudioBlob);
+        
+      if (uploadError) {
+        throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
+      }
+      
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('processed_audio')
+        .getPublicUrl(fileName);
+
+      return {
+        type: processingType,
+        url: publicUrl,
+        processed: true,
+        analysis: JSON.stringify(pattern),
+        transcription: "Test drum pattern",
+        audioBuffer: drumAudioBuffer,
+        musicalAnalysis: { tempo: 120, timeSignature: "4/4", pattern },
+        tempo: 120,
+        timeSignature: "4/4",
+        patternData: pattern
+      };
+    }
+
     const response = await fetch(audioUrl);
     if (!response.ok) {
       throw new Error('Failed to fetch audio file');
