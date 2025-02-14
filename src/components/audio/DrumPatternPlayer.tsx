@@ -42,10 +42,22 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
       }
 
       if (data.pattern_data && data.tempo) {
+        // Validate and transform the pattern data
+        const patternData = data.pattern_data as Record<string, number[]>;
+        
+        // Ensure all required drum types are present with default empty arrays
+        const validatedPattern = {
+          kick: Array.isArray(patternData.kick) ? patternData.kick : [],
+          snare: Array.isArray(patternData.snare) ? patternData.snare : [],
+          hihat: Array.isArray(patternData.hihat) ? patternData.hihat : [],
+          crash: Array.isArray(patternData.crash) ? patternData.crash : [],
+          ...patternData // Include any additional drum types
+        };
+
         setPattern({
-          pattern: data.pattern_data,
-          tempo: data.tempo,
-          timeSignature: data.time_signature
+          pattern: validatedPattern,
+          tempo: Number(data.tempo),
+          timeSignature: data.time_signature || '4/4'
         });
       }
     };
