@@ -9,6 +9,30 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      drum_samples: {
+        Row: {
+          created_at: string
+          filename: string
+          id: string
+          name: string
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          filename: string
+          id?: string
+          name: string
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          filename?: string
+          id?: string
+          name?: string
+          storage_path?: string
+        }
+        Relationships: []
+      }
       processed_tracks: {
         Row: {
           combined_file_path: string | null
