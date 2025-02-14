@@ -8,7 +8,30 @@ export interface ProcessedTrack {
   musical_analysis?: any;
   tempo?: number;
   time_signature?: string;
-  pattern_data?: any;
+  pattern_data?: Record<string, number[]>;
   error_message?: string;
   created_at: string;
+  midi_data?: {
+    notes: Array<{
+      pitch: number;
+      startTime: number;
+      endTime: number;
+      velocity: number;
+    }>;
+    instrument: string;
+  };
+  freesound_samples?: Record<string, {
+    id: string;
+    name: string;
+    url: string;
+  }>;
+  playback_status?: 'pending' | 'loading_samples' | 'ready' | 'error';
+}
+
+export interface DrumPattern {
+  tempo: number;
+  timeSignature: string;
+  pattern: {
+    [key: string]: number[];
+  };
 }

@@ -95,11 +95,14 @@ export type Database = {
           created_at: string | null
           drums_file_path: string | null
           error_message: string | null
+          freesound_samples: Json | null
           id: string
           melody_file_path: string | null
+          midi_data: Json | null
           musical_analysis: Json | null
           output_url: string | null
           pattern_data: Json | null
+          playback_status: string | null
           processed_audio_status: string | null
           processed_audio_url: string | null
           processing_status: string | null
@@ -115,11 +118,14 @@ export type Database = {
           created_at?: string | null
           drums_file_path?: string | null
           error_message?: string | null
+          freesound_samples?: Json | null
           id?: string
           melody_file_path?: string | null
+          midi_data?: Json | null
           musical_analysis?: Json | null
           output_url?: string | null
           pattern_data?: Json | null
+          playback_status?: string | null
           processed_audio_status?: string | null
           processed_audio_url?: string | null
           processing_status?: string | null
@@ -137,11 +143,14 @@ export type Database = {
           created_at?: string | null
           drums_file_path?: string | null
           error_message?: string | null
+          freesound_samples?: Json | null
           id?: string
           melody_file_path?: string | null
+          midi_data?: Json | null
           musical_analysis?: Json | null
           output_url?: string | null
           pattern_data?: Json | null
+          playback_status?: string | null
           processed_audio_status?: string | null
           processed_audio_url?: string | null
           processing_status?: string | null

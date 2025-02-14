@@ -3,18 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Play, Pause, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-
-interface DrumPattern {
-  pattern: {
-    kick: number[];
-    snare: number[];
-    hihat: number[];
-    crash: number[];
-    [key: string]: number[]; // Allow for other drum types
-  };
-  tempo: number;
-  timeSignature: string;
-}
+import { useToast } from "@/components/ui/use-toast";
+import { DrumPattern } from './types';
 
 interface DrumPatternPlayerProps {
   processedTrackId: string;
@@ -24,94 +14,69 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pattern, setPattern] = useState<DrumPattern | null>(null);
-  const [drumSamples, setDrumSamples] = useState<Record<string, AudioBuffer>>({});
+  const [audioBuffers, setAudioBuffers] = useState<Record<string, AudioBuffer>>({});
+  const { toast } = useToast();
   const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const fetchPattern = async () => {
-      const { data, error } = await supabase
-        .from('processed_tracks')
-        .select('*')
-        .eq('id', processedTrackId)
-        .single();
+    const fetchPatternAndSamples = async () => {
+      try {
+        // Get the processed track data
+        const { data, error } = await supabase
+          .from('processed_tracks')
+          .select('*')
+          .eq('id', processedTrackId)
+          .single();
 
-      if (error) {
-        console.error('Error fetching pattern:', error);
-        return;
-      }
+        if (error) throw error;
 
-      if (data.pattern_data && data.tempo) {
-        // Validate and transform the pattern data
-        const patternData = data.pattern_data as Record<string, number[]>;
-        
-        // Ensure all required drum types are present with default empty arrays
-        const validatedPattern = {
-          kick: Array.isArray(patternData.kick) ? patternData.kick : [],
-          snare: Array.isArray(patternData.snare) ? patternData.snare : [],
-          hihat: Array.isArray(patternData.hihat) ? patternData.hihat : [],
-          crash: Array.isArray(patternData.crash) ? patternData.crash : [],
-          ...patternData // Include any additional drum types
-        };
+        if (!data.pattern_data || !data.tempo || !data.freesound_samples) {
+          throw new Error('Missing required pattern data or Freesound samples');
+        }
 
+        // Set the pattern
         setPattern({
-          pattern: validatedPattern,
+          pattern: data.pattern_data,
           tempo: Number(data.tempo),
           timeSignature: data.time_signature || '4/4'
         });
-      }
-    };
-
-    fetchPattern();
-  }, [processedTrackId]);
-
-  useEffect(() => {
-    const loadDrumSamples = async () => {
-      try {
-        const { data: drumKit, error: drumKitError } = await supabase
-          .from('drum_kits')
-          .select(`
-            id,
-            name,
-            drum_kit_samples (
-              id,
-              sample_type,
-              storage_path
-            )
-          `)
-          .eq('name', 'Default Kit')
-          .single();
-
-        if (drumKitError || !drumKit) {
-          throw new Error('Failed to load drum kit');
-        }
 
         // Initialize audio context
         audioContextRef.current = new AudioContext();
-        const loadedSamples: Record<string, AudioBuffer> = {};
+        const loadedBuffers: Record<string, AudioBuffer> = {};
 
-        // Load each sample
-        for (const sample of drumKit.drum_kit_samples) {
-          const { data } = await supabase.storage
-            .from('drum_samples')
-            .download(sample.storage_path);
-
-          if (data) {
-            const arrayBuffer = await data.arrayBuffer();
+        // Load Freesound samples
+        for (const [instrumentType, sample] of Object.entries(data.freesound_samples)) {
+          try {
+            const response = await fetch(sample.url);
+            const arrayBuffer = await response.arrayBuffer();
             const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
-            loadedSamples[sample.sample_type] = audioBuffer;
+            loadedBuffers[instrumentType] = audioBuffer;
+          } catch (err) {
+            console.error(`Error loading sample for ${instrumentType}:`, err);
+            toast({
+              title: "Error",
+              description: `Failed to load ${instrumentType} sample`,
+              variant: "destructive",
+            });
           }
         }
 
-        setDrumSamples(loadedSamples);
+        setAudioBuffers(loadedBuffers);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error loading drum samples:', error);
+        console.error('Error fetching pattern and samples:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load drum pattern and samples",
+          variant: "destructive",
+        });
         setIsLoading(false);
       }
     };
 
-    loadDrumSamples();
+    fetchPatternAndSamples();
 
     return () => {
       if (audioContextRef.current) {
@@ -121,14 +86,22 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [processedTrackId, toast]);
 
-  const playDrumSound = (type: string, time: number) => {
-    if (!audioContextRef.current || !drumSamples[type]) return;
+  const playSound = (type: string, time: number) => {
+    if (!audioContextRef.current || !audioBuffers[type]) return;
 
     const source = audioContextRef.current.createBufferSource();
-    source.buffer = drumSamples[type];
-    source.connect(audioContextRef.current.destination);
+    source.buffer = audioBuffers[type];
+    
+    // Create a gain node for volume control
+    const gainNode = audioContextRef.current.createGain();
+    gainNode.gain.value = 0.7; // Adjust volume as needed
+    
+    // Connect the nodes
+    source.connect(gainNode);
+    gainNode.connect(audioContextRef.current.destination);
+    
     source.start(time);
   };
 
@@ -139,23 +112,18 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
     const startTime = audioContextRef.current.currentTime;
     const beatDuration = 60 / pattern.tempo;
 
-    // Schedule all drum hits
+    // Schedule all sounds
     Object.entries(pattern.pattern).forEach(([type, beats]) => {
-      // Ensure beats is an array of numbers
-      if (Array.isArray(beats)) {
-        beats.forEach((beat) => {
-          if (typeof beat === 'number') {
-            const time = startTime + (beat - 1) * beatDuration;
-            playDrumSound(type, time);
-          }
-        });
-      }
+      beats.forEach((beat) => {
+        const time = startTime + (beat - 1) * beatDuration;
+        playSound(type, time);
+      });
     });
 
     // Calculate pattern duration and stop playing after it's done
     const allBeats = Object.values(pattern.pattern).flat();
-    const maxBeat = Math.max(...allBeats.filter((beat): beat is number => typeof beat === 'number'));
-    const patternDuration = (maxBeat - 1) * beatDuration * 1000;
+    const maxBeat = Math.max(...allBeats);
+    const patternDuration = maxBeat * beatDuration * 1000;
 
     timerRef.current = window.setTimeout(() => {
       setIsPlaying(false);
@@ -173,7 +141,7 @@ export const DrumPatternPlayer = ({ processedTrackId }: DrumPatternPlayerProps) 
     return (
       <div className="flex items-center justify-center p-4">
         <Loader2 className="h-6 w-6 animate-spin" />
-        <span className="ml-2">Loading drum samples...</span>
+        <span className="ml-2">Loading samples...</span>
       </div>
     );
   }
