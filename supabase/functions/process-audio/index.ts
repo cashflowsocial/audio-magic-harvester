@@ -13,6 +13,7 @@ serve(async (req) => {
 
   try {
     const { recordingId, processingType } = await req.json()
+    console.log(`[Process Audio] Starting processing for recording ${recordingId}, type: ${processingType}`)
     
     if (!recordingId || !processingType) {
       throw new Error('Missing required parameters')
@@ -28,8 +29,11 @@ serve(async (req) => {
       .single()
 
     if (recordingError || !recording) {
+      console.error('[Process Audio] Recording not found:', recordingError)
       throw new Error('Recording not found')
     }
+
+    console.log('[Process Audio] Found recording:', recording.filename)
 
     // Get the public URL for the recording
     const { data: publicUrlData } = await supabase
@@ -37,17 +41,48 @@ serve(async (req) => {
       .from('recordings')
       .getPublicUrl(recording.filename)
 
+    console.log('[Process Audio] Got public URL:', publicUrlData.publicUrl)
+
     // Create a new processed track record
     const track = await createProcessedTrack(supabase, recordingId, processingType as ProcessingType)
+    console.log('[Process Audio] Created processed track record:', track.id)
 
     try {
       // Process the audio
+      console.log('[Process Audio] Starting audio processing...')
       const result = await processAudio(
         publicUrlData.publicUrl,
         processingType as ProcessingType
       )
+      console.log('[Process Audio] Processing completed, result:', result)
+
+      // Create a storage filename for the processed audio
+      const processedFilename = `processed-${processingType}-${track.id}.mp3`
+      console.log('[Process Audio] Will save processed audio as:', processedFilename)
+
+      // Upload the processed audio if it's a buffer/blob
+      if (result.audioBuffer) {
+        console.log('[Process Audio] Uploading processed audio to storage...')
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('processed_audio')
+          .upload(processedFilename, result.audioBuffer)
+
+        if (uploadError) {
+          console.error('[Process Audio] Upload error:', uploadError)
+          throw uploadError
+        }
+
+        // Get the public URL for the processed audio
+        const { data: processedUrlData } = await supabase.storage
+          .from('processed_audio')
+          .getPublicUrl(processedFilename)
+
+        result.url = processedUrlData.publicUrl
+        console.log('[Process Audio] Processed audio URL:', result.url)
+      }
 
       // Update the processed track with results
+      console.log('[Process Audio] Updating processed track record...')
       await updateProcessedTrack(
         supabase,
         track.id,
@@ -69,6 +104,7 @@ serve(async (req) => {
       )
 
     } catch (processingError) {
+      console.error('[Process Audio] Processing error:', processingError)
       // Mark the track as failed if processing fails
       await markProcessingAsFailed(
         supabase,
@@ -79,7 +115,7 @@ serve(async (req) => {
     }
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('[Process Audio] Error:', error)
     
     const headers = new Headers(corsHeaders)
     headers.set('Content-Type', 'application/json')

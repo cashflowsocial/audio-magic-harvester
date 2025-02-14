@@ -1,15 +1,11 @@
 
 export type ProcessingType = 'drums' | 'melody' | 'instrumentation';
 
-export type ProcessingResult = {
+export interface ProcessingResult {
   type: ProcessingType;
   url: string;
   processed: boolean;
-  analysis?: string;
-  transcription?: string;
-};
-
-export type AudioProcessingRequest = {
-  recordingId: string;
-  processingType: ProcessingType;
-};
+  analysis: string;
+  transcription: string;
+  audioBuffer?: ArrayBuffer;
+}

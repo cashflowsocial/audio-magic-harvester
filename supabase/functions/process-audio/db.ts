@@ -1,6 +1,6 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
-import { ProcessingType } from './types.ts'
+import { ProcessingType, ProcessingResult } from './types.ts'
 
 export const createSupabaseClient = () => {
   return createClient(
@@ -20,6 +20,7 @@ export const createProcessedTrack = async (
   recordingId: string, 
   processingType: ProcessingType
 ) => {
+  console.log('[DB] Creating processed track record:', { recordingId, processingType })
   const { data, error } = await supabaseClient
     .from('processed_tracks')
     .insert({
@@ -30,26 +31,34 @@ export const createProcessedTrack = async (
     .select()
     .single()
 
-  if (error) throw new Error(`Error creating processed track: ${error.message}`)
+  if (error) {
+    console.error('[DB] Error creating processed track:', error)
+    throw new Error(`Error creating processed track: ${error.message}`)
+  }
   return data
 }
 
 export const updateProcessedTrack = async (
   supabaseClient: any,
   trackId: string,
-  result: any,
+  result: ProcessingResult,
   processingType: ProcessingType,
   outputUrl: string
 ) => {
+  console.log('[DB] Updating processed track:', { trackId, processingType, outputUrl })
   const { error } = await supabaseClient
     .from('processed_tracks')
     .update({
       processing_status: 'completed',
+      processed_audio_url: outputUrl,
       output_url: outputUrl
     })
     .eq('id', trackId)
 
-  if (error) throw new Error(`Error updating processed track: ${error.message}`)
+  if (error) {
+    console.error('[DB] Error updating processed track:', error)
+    throw new Error(`Error updating processed track: ${error.message}`)
+  }
 }
 
 export const markProcessingAsFailed = async (
@@ -57,6 +66,7 @@ export const markProcessingAsFailed = async (
   trackId: string,
   errorMessage: string
 ) => {
+  console.log('[DB] Marking processing as failed:', { trackId, errorMessage })
   const { error } = await supabaseClient
     .from('processed_tracks')
     .update({
@@ -65,5 +75,8 @@ export const markProcessingAsFailed = async (
     })
     .eq('id', trackId)
 
-  if (error) throw new Error(`Error marking processing as failed: ${error.message}`)
+  if (error) {
+    console.error('[DB] Error marking processing as failed:', error)
+    throw new Error(`Error marking processing as failed: ${error.message}`)
+  }
 }

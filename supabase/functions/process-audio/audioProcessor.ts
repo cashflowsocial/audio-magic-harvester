@@ -2,53 +2,25 @@
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
-function processBase64Chunks(base64String: string, chunkSize = 32768) {
-  const chunks: Uint8Array[] = [];
-  let position = 0;
-  
-  while (position < base64String.length) {
-    const chunk = base64String.slice(position, position + chunkSize);
-    const binaryChunk = atob(chunk);
-    const bytes = new Uint8Array(binaryChunk.length);
-    
-    for (let i = 0; i < binaryChunk.length; i++) {
-      bytes[i] = binaryChunk.charCodeAt(i);
-    }
-    
-    chunks.push(bytes);
-    position += chunkSize;
-  }
-
-  const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return result;
-}
-
 export const processAudio = async (
   audioUrl: string,
   processingType: ProcessingType
 ): Promise<ProcessingResult> => {
   try {
-    console.log(`Starting ${processingType} processing for audio at ${audioUrl}`);
+    console.log(`[Audio Processor] Starting ${processingType} processing for audio at ${audioUrl}`)
 
     // Download the audio file
-    const response = await fetch(audioUrl);
+    const response = await fetch(audioUrl)
     if (!response.ok) {
-      throw new Error('Failed to fetch audio file');
+      throw new Error('Failed to fetch audio file')
     }
 
-    const audioBuffer = await response.arrayBuffer();
+    console.log('[Audio Processor] Successfully downloaded audio file')
+    const audioBuffer = await response.arrayBuffer()
     const audioBlob = new Blob([audioBuffer], { type: 'audio/wav' });
 
     // First, transcribe the audio using Whisper
-    console.log('Transcribing audio with Whisper...');
+    console.log('[Audio Processor] Transcribing audio with Whisper...')
     const formData = new FormData();
     formData.append('file', audioBlob, 'audio.wav');
     formData.append('model', 'whisper-1');
@@ -62,14 +34,16 @@ export const processAudio = async (
     });
 
     if (!whisperResponse.ok) {
-      throw new Error(`Whisper API error: ${await whisperResponse.text()}`);
+      const errorText = await whisperResponse.text()
+      console.error('[Audio Processor] Whisper API error:', errorText)
+      throw new Error(`Whisper API error: ${errorText}`)
     }
 
     const transcription = await whisperResponse.json();
-    console.log('Transcription result:', transcription);
+    console.log('[Audio Processor] Transcription result:', transcription);
 
     // Use GPT-4 to analyze the transcription and generate musical instructions
-    console.log('Generating musical analysis...');
+    console.log('[Audio Processor] Generating musical analysis...');
     const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -96,23 +70,27 @@ export const processAudio = async (
     });
 
     if (!gptResponse.ok) {
-      throw new Error(`GPT API error: ${await gptResponse.text()}`);
+      const errorText = await gptResponse.text()
+      console.error('[Audio Processor] GPT API error:', errorText)
+      throw new Error(`GPT API error: ${errorText}`)
     }
 
     const analysis = await gptResponse.json();
-    console.log('Musical analysis:', analysis);
+    console.log('[Audio Processor] Musical analysis:', analysis);
 
-    // Return the processed result
+    // For now, we'll return the original audio as processed audio
+    // In a real implementation, this would be where we'd apply AI transformations
     return {
       type: processingType,
-      url: audioUrl,
+      url: audioUrl, // Temporarily using the original audio URL
       processed: true,
       analysis: analysis.choices[0].message.content,
-      transcription: transcription.text
+      transcription: transcription.text,
+      audioBuffer: audioBuffer // Pass the audio buffer for storage
     };
 
   } catch (error) {
-    console.error('Audio processing error:', error);
+    console.error('[Audio Processor] Error:', error);
     throw error;
   }
 };
