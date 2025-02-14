@@ -33,9 +33,10 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       return data || [];
     },
     enabled: !!recordingId,
-    refetchInterval: (data) => {
-      // Only refetch if there are any tracks in 'processing' status
-      const hasProcessingTracks = data?.some(track => track.processing_status === 'processing');
+    refetchInterval: (data: any) => {
+      // Only refetch if we have data and there are any tracks in 'processing' status
+      if (!Array.isArray(data)) return false;
+      const hasProcessingTracks = data.some(track => track.processing_status === 'processing');
       return hasProcessingTracks ? 3000 : false;
     }
   });
