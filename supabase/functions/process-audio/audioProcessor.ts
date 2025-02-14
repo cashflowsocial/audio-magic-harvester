@@ -2,33 +2,85 @@
 import { ProcessingType, ProcessingResult } from './types.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
-const drumSamples = {
-  kick: 'https://s3.amazonaws.com/your-bucket/kick.wav',  // TODO: Replace with actual hosted drum samples
-  snare: 'https://s3.amazonaws.com/your-bucket/snare.wav',
-  hihat: 'https://s3.amazonaws.com/your-bucket/hihat.wav',
-  crash: 'https://s3.amazonaws.com/your-bucket/crash.wav'
-};
+// Define drum sample URLs from our Supabase storage
+function getDrumSampleUrls(supabaseUrl: string) {
+  const baseUrl = `${supabaseUrl}/storage/v1/object/public/drum_samples`;
+  return {
+    kick: `${baseUrl}/kick.wav`,
+    snare: `${baseUrl}/snare.wav`,
+    hihat: `${baseUrl}/hihat.wav`,
+    crash: `${baseUrl}/crash.wav`
+  };
+}
 
 async function loadAudioBuffer(url: string): Promise<ArrayBuffer> {
+  console.log('[Audio Processor] Loading audio sample from:', url);
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to load audio sample: ${url}`);
+  if (!response.ok) {
+    console.error('[Audio Processor] Failed to load audio sample:', url, response.status);
+    throw new Error(`Failed to load audio sample: ${url}`);
+  }
   return await response.arrayBuffer();
 }
 
-async function createDrumTrack(pattern: any, tempo: number): Promise<ArrayBuffer> {
-  // This is a placeholder for actual drum synthesis
+async function loadDrumSamples(supabaseUrl: string) {
+  const urls = getDrumSampleUrls(supabaseUrl);
+  const samples: Record<string, ArrayBuffer> = {};
+  
+  try {
+    const [kick, snare, hihat, crash] = await Promise.all([
+      loadAudioBuffer(urls.kick),
+      loadAudioBuffer(urls.snare),
+      loadAudioBuffer(urls.hihat),
+      loadAudioBuffer(urls.crash)
+    ]);
+    
+    samples.kick = kick;
+    samples.snare = snare;
+    samples.hihat = hihat;
+    samples.crash = crash;
+    
+    console.log('[Audio Processor] Successfully loaded all drum samples');
+    return samples;
+  } catch (error) {
+    console.error('[Audio Processor] Error loading drum samples:', error);
+    throw error;
+  }
+}
+
+async function mixAudioBuffers(buffers: ArrayBuffer[], offsets: number[]): Promise<ArrayBuffer> {
+  // This is a placeholder for actual audio mixing
   // In a real implementation, we would:
-  // 1. Create a Web Audio context
-  // 2. Load drum samples
-  // 3. Schedule drum hits based on the pattern
-  // 4. Render to an audio buffer
-  // For now, we'll return a simple test tone
+  // 1. Convert ArrayBuffers to AudioBuffers
+  // 2. Mix them at the specified offsets
+  // 3. Return the final mixed buffer
+  // For now, we'll return the first buffer
+  return buffers[0];
+}
+
+async function createDrumTrack(
+  pattern: Record<string, number[]>,
+  tempo: number,
+  samples: Record<string, ArrayBuffer>
+): Promise<ArrayBuffer> {
   console.log('[Audio Processor] Creating drum track with pattern:', pattern, 'at tempo:', tempo);
   
-  // TODO: Implement actual drum synthesis
-  // For now, return the original audio
-  const kickResponse = await fetch(drumSamples.kick);
-  return await kickResponse.arrayBuffer();
+  const buffers: ArrayBuffer[] = [];
+  const offsets: number[] = [];
+  const beatDuration = 60 / tempo; // Duration of one beat in seconds
+  
+  // Schedule each drum hit
+  Object.entries(pattern).forEach(([drumType, hits]) => {
+    hits.forEach(beatPosition => {
+      if (samples[drumType]) {
+        buffers.push(samples[drumType]);
+        offsets.push(beatPosition * beatDuration);
+      }
+    });
+  });
+  
+  // Mix all the drum hits together
+  return await mixAudioBuffers(buffers, offsets);
 }
 
 export const processAudio = async (
@@ -139,8 +191,12 @@ export const processAudio = async (
         timeSignature = drumPattern.timeSignature;
         patternData = drumPattern.pattern;
 
+        // Load drum samples
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const samples = await loadDrumSamples(supabaseUrl);
+
         // Generate actual drum track based on the pattern
-        processedAudio = await createDrumTrack(drumPattern.pattern, drumPattern.tempo);
+        processedAudio = await createDrumTrack(drumPattern.pattern, drumPattern.tempo, samples);
       } catch (e) {
         console.error('[Audio Processor] Error parsing drum pattern:', e);
         throw new Error('Failed to parse drum pattern');
