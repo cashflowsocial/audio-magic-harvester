@@ -1,56 +1,55 @@
 
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-  navigationMenuTriggerStyle,
-} from "@/components/ui/navigation-menu"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
 
 export const NavMenu = () => {
-  return (
-    <NavigationMenu className="p-4">
-      <NavigationMenuList>
-        <NavigationMenuItem>
-          <Link to="/" className={navigationMenuTriggerStyle()}>
-            Home
-          </Link>
-        </NavigationMenuItem>
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-        <NavigationMenuItem>
-          <NavigationMenuTrigger>Recordings</NavigationMenuTrigger>
-          <NavigationMenuContent>
-            <div className="grid gap-3 p-4 w-[400px]">
-              <NavigationMenuLink asChild>
-                <Link 
-                  to="/recordings"
-                  className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                >
-                  <div className="text-sm font-medium leading-none">My Recordings</div>
-                  <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                    Access and manage all your saved recordings
-                  </p>
-                </Link>
-              </NavigationMenuLink>
-              
-              <NavigationMenuLink asChild>
-                <Link 
-                  to="/new"
-                  className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                >
-                  <div className="text-sm font-medium leading-none">New Recording</div>
-                  <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                    Create a new voice recording
-                  </p>
-                </Link>
-              </NavigationMenuLink>
-            </div>
-          </NavigationMenuContent>
-        </NavigationMenuItem>
-      </NavigationMenuList>
-    </NavigationMenu>
-  )
-}
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      navigate("/auth");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error signing out",
+        description: error instanceof Error ? error.message : "An error occurred",
+      });
+    }
+  };
+
+  return (
+    <nav className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex">
+            <Link
+              to="/"
+              className="flex items-center px-2 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              Home
+            </Link>
+            <Link
+              to="/recordings"
+              className="flex items-center px-2 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              Recordings
+            </Link>
+          </div>
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              onClick={handleSignOut}
+            >
+              Sign Out
+            </Button>
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+};
