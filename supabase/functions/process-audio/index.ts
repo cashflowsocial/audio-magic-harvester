@@ -30,10 +30,11 @@ serve(async (req) => {
     return new Response(
       JSON.stringify(testResult),
       { 
-        headers: new Headers({
-          ...corsHeaders,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
           'Content-Type': 'application/json'
-        })
+        }
       }
     );
 
@@ -50,10 +51,11 @@ serve(async (req) => {
         message: error.message
       }),
       { 
-        headers: new Headers({
-          ...corsHeaders,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
           'Content-Type': 'application/json'
-        }),
+        },
         status: 500
       }
     );
