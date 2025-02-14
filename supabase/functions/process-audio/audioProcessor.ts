@@ -21,12 +21,34 @@ serve(async (req) => {
 
   try {
     const { recordingId, processingType } = await req.json();
+    console.log('[Process Audio] Starting processing for recording:', recordingId);
 
     // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+
+    // First, get our default drum kit samples
+    const { data: drumKit, error: drumKitError } = await supabase
+      .from('drum_kits')
+      .select(`
+        id,
+        name,
+        drum_kit_samples (
+          id,
+          sample_type,
+          storage_path
+        )
+      `)
+      .eq('name', 'Default Kit')
+      .single();
+
+    if (drumKitError || !drumKit) {
+      throw new Error('Default drum kit not found');
+    }
+
+    console.log('[Process Audio] Using drum kit:', drumKit);
 
     // Get the recording URL
     const { data: recording, error: recordingError } = await supabase
@@ -66,6 +88,12 @@ serve(async (req) => {
     const transcription = await transcriptionResponse.json();
     console.log('[Audio Processor] Transcription result:', transcription);
 
+    // Create a mapping of available samples to provide to GPT
+    const sampleMapping = drumKit.drum_kit_samples.reduce((acc, sample) => {
+      acc[sample.sample_type] = sample.id;
+      return acc;
+    }, {});
+
     // Now analyze the transcription with GPT-4 to create a drum pattern
     const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -79,6 +107,9 @@ serve(async (req) => {
           {
             role: 'system',
             content: `You are a drum pattern expert that can interpret beatbox sounds and vocal drum imitations into precise drum patterns.
+            
+            Available drum samples:
+            ${JSON.stringify(sampleMapping, null, 2)}
             
             When you receive a transcription of vocal drum sounds:
             1. First identify the tempo by analyzing the rhythm and spacing of the sounds
@@ -103,6 +134,12 @@ serve(async (req) => {
                 "snare": number[] (beat positions),
                 "hihat": number[] (beat positions),
                 "crash": number[] (beat positions)
+              },
+              "sampleIds": {
+                "kick": string (sample ID),
+                "snare": string (sample ID),
+                "hihat": string (sample ID),
+                "crash": string (sample ID)
               }
             }`
           },
@@ -122,7 +159,9 @@ serve(async (req) => {
     const analysis = await gptResponse.json();
     console.log('[Audio Processor] Pattern analysis:', analysis);
 
-    const pattern = JSON.parse(analysis.choices[0].message.content) as DrumPattern;
+    const pattern = JSON.parse(analysis.choices[0].message.content) as DrumPattern & {
+      sampleIds: Record<string, string>;
+    };
 
     // Save the MIDI pattern
     const { data: midiPattern, error: midiError } = await supabase
@@ -132,12 +171,7 @@ serve(async (req) => {
         pattern_data: pattern.pattern,
         tempo: pattern.tempo,
         time_signature: pattern.timeSignature,
-        freesound_samples: {
-          kick: "667", // Default Freesound IDs for our drum kit
-          snare: "668",
-          hihat: "669",
-          crash: "670"
-        }
+        freesound_samples: pattern.sampleIds
       })
       .select()
       .single();
@@ -151,7 +185,11 @@ serve(async (req) => {
         success: true,
         midiPattern,
         transcription: transcription.text,
-        analysis: pattern
+        analysis: pattern,
+        drumKit: {
+          id: drumKit.id,
+          samples: drumKit.drum_kit_samples
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

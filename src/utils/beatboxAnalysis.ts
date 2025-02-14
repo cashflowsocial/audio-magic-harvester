@@ -3,6 +3,7 @@ interface BeatEvent {
   type: 'kick' | 'snare' | 'hihat';
   timestamp: number;
   velocity: number;
+  sampleId: string;
 }
 
 export const analyzeBeatbox = async (audioBuffer: AudioBuffer): Promise<BeatEvent[]> => {
@@ -48,12 +49,13 @@ export const analyzeBeatbox = async (audioBuffer: AudioBuffer): Promise<BeatEven
   const snarePeaks = detectPeaks(midFreq, -35);
   const hihatPeaks = detectPeaks(highFreq, -30);
   
-  // Convert peaks to events
+  // Convert peaks to events with sample IDs
   kickPeaks.forEach(peak => {
     events.push({
       type: 'kick',
       timestamp: peak * (audioBuffer.duration / bufferLength),
-      velocity: Math.min(127, Math.round(Math.abs(lowFreq[peak]) * 2))
+      velocity: Math.min(127, Math.round(Math.abs(lowFreq[peak]) * 2)),
+      sampleId: '' // Will be filled by the edge function
     });
   });
   
@@ -61,7 +63,8 @@ export const analyzeBeatbox = async (audioBuffer: AudioBuffer): Promise<BeatEven
     events.push({
       type: 'snare',
       timestamp: peak * (audioBuffer.duration / bufferLength),
-      velocity: Math.min(127, Math.round(Math.abs(midFreq[peak]) * 2))
+      velocity: Math.min(127, Math.round(Math.abs(midFreq[peak]) * 2)),
+      sampleId: '' // Will be filled by the edge function
     });
   });
   
@@ -69,7 +72,8 @@ export const analyzeBeatbox = async (audioBuffer: AudioBuffer): Promise<BeatEven
     events.push({
       type: 'hihat',
       timestamp: peak * (audioBuffer.duration / bufferLength),
-      velocity: Math.min(127, Math.round(Math.abs(highFreq[peak]) * 2))
+      velocity: Math.min(127, Math.round(Math.abs(highFreq[peak]) * 2)),
+      sampleId: '' // Will be filled by the edge function
     });
   });
   
