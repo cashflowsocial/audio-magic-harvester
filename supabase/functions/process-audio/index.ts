@@ -18,7 +18,6 @@ serve(async (req) => {
     console.log('Initializing Hugging Face client...');
     const hf = new HfInference(token);
 
-    // Test the connection
     console.log('Testing Hugging Face connection...');
     const testResult = await testHuggingFaceConnection(hf);
     console.log('Connection test result:', testResult);
@@ -27,12 +26,16 @@ serve(async (req) => {
       throw new Error(testResult.message);
     }
 
-    const headers = new Headers(corsHeaders);
-    headers.set('Content-Type', 'application/json');
+    // Create response headers
+    const responseHeaders = new Headers();
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      responseHeaders.set(key, value);
+    }
+    responseHeaders.set('Content-Type', 'application/json');
 
     return new Response(
       JSON.stringify(testResult),
-      { headers }
+      { headers: responseHeaders }
     );
 
   } catch (error) {
@@ -42,8 +45,12 @@ serve(async (req) => {
       stack: error.stack
     });
     
-    const headers = new Headers(corsHeaders);
-    headers.set('Content-Type', 'application/json');
+    // Create error response headers
+    const errorHeaders = new Headers();
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      errorHeaders.set(key, value);
+    }
+    errorHeaders.set('Content-Type', 'application/json');
 
     return new Response(
       JSON.stringify({
@@ -51,7 +58,7 @@ serve(async (req) => {
         message: error.message
       }),
       { 
-        headers,
+        headers: errorHeaders,
         status: 500
       }
     );
