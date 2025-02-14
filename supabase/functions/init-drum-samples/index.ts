@@ -7,24 +7,77 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-async function uploadDrumSample(supabase: any, sampleType: string) {
-  // URL to your default drum samples - these should be hosted somewhere accessible
-  const sampleUrl = `https://example.com/drum-samples/${sampleType}.mp3`; // Replace with actual URLs
+// Freesound API search terms for each sample type
+const sampleSearchTerms = {
+  kick: 'kick drum electronic',
+  snare: 'snare drum electronic',
+  hihat: 'hihat electronic closed',
+  crash: 'crash cymbal electronic'
+};
+
+async function downloadSampleFromFreesound(sampleType: string) {
+  const clientId = Deno.env.get('FREESOUND_CLIENT_ID');
+  const clientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
   
-  try {
-    // Download the sample file
-    const response = await fetch(sampleUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${sampleType} sample`);
+  // First, get the access token
+  const tokenResponse = await fetch('https://freesound.org/apiv2/oauth2/access_token/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      client_id: clientId!,
+      client_secret: clientSecret!,
+      grant_type: 'client_credentials',
+    }),
+  });
+
+  const { access_token } = await tokenResponse.json();
+
+  // Search for samples
+  const searchResponse = await fetch(
+    `https://freesound.org/apiv2/search/text/?query=${encodeURIComponent(sampleSearchTerms[sampleType])}&filter=duration:[0 TO 1]&fields=id,download,name`,
+    {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+      },
     }
+  );
+
+  const searchResult = await searchResponse.json();
+  
+  if (!searchResult.results?.length) {
+    throw new Error(`No samples found for ${sampleType}`);
+  }
+
+  // Get the first result's download URL
+  const sampleId = searchResult.results[0].id;
+  const downloadResponse = await fetch(
+    `https://freesound.org/apiv2/sounds/${sampleId}/download/`,
+    {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+      },
+    }
+  );
+
+  if (!downloadResponse.ok) {
+    throw new Error(`Failed to download ${sampleType} sample`);
+  }
+
+  return new Uint8Array(await downloadResponse.arrayBuffer());
+}
+
+async function uploadDrumSample(supabase: any, sampleType: string) {
+  try {
+    console.log(`Downloading ${sampleType} sample from Freesound...`);
+    const fileData = await downloadSampleFromFreesound(sampleType);
     
-    const arrayBuffer = await response.arrayBuffer();
-    const file = new Uint8Array(arrayBuffer);
-    
+    console.log(`Uploading ${sampleType} sample to Supabase storage...`);
     // Upload to Supabase storage
     const { data, error } = await supabase.storage
       .from('drum_samples')
-      .upload(`${sampleType}.mp3`, file, {
+      .upload(`${sampleType}.mp3`, fileData, {
         contentType: 'audio/mpeg',
         upsert: true
       });
