@@ -9,6 +9,62 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      drum_kit_samples: {
+        Row: {
+          created_at: string | null
+          filename: string
+          id: string
+          kit_id: string | null
+          sample_type: Database["public"]["Enums"]["drum_sample_type"]
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string | null
+          filename: string
+          id?: string
+          kit_id?: string | null
+          sample_type: Database["public"]["Enums"]["drum_sample_type"]
+          storage_path: string
+        }
+        Update: {
+          created_at?: string | null
+          filename?: string
+          id?: string
+          kit_id?: string | null
+          sample_type?: Database["public"]["Enums"]["drum_sample_type"]
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drum_kit_samples_kit_id_fkey"
+            columns: ["kit_id"]
+            isOneToOne: false
+            referencedRelation: "drum_kits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drum_kits: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       drum_samples: {
         Row: {
           created_at: string
@@ -176,6 +232,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      drum_sample_type:
+        | "kick"
+        | "snare"
+        | "hihat"
+        | "crash"
+        | "tom"
+        | "percussion"
       processing_type: "drums" | "melody" | "instrumentation"
       recording_status: "pending" | "processing" | "completed" | "failed"
     }
