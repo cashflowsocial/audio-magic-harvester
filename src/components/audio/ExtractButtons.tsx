@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Drumstick, Music, Guitar, Play, Loader2, StopCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
@@ -33,9 +32,8 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     },
     enabled: !!recordingId,
     refetchInterval: (data) => {
-      // Check if any tracks are being processed
-      const processedData = data as any[];
-      return processedData?.some?.(track => track.processing_status === 'processing') ? 3000 : false;
+      if (!Array.isArray(data)) return false;
+      return data?.some(track => track.processing_status === 'processing') ? 3000 : false;
     }
   });
 
