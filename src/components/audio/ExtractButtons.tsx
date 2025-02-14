@@ -33,12 +33,9 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     },
     enabled: !!recordingId,
     refetchInterval: (data) => {
-      // Only poll if there are tracks being processed
-      const tracks = data as any[] || [];
-      if (tracks.some(track => track.processing_status === 'processing')) {
-        return 3000; // Poll every 3 seconds instead of 5
-      }
-      return false;
+      // Check if any tracks are being processed
+      const processedData = data as any[];
+      return processedData?.some?.(track => track.processing_status === 'processing') ? 3000 : false;
     }
   });
 
