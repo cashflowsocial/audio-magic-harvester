@@ -1,6 +1,6 @@
 
-import { Midi } from 'jsmidgen';
-import { Note } from './audioAnalyzer';
+import { Midi } from 'https://esm.sh/jsmidgen@0.1.5';
+import { Note } from './audioAnalyzer.ts';
 
 export function generateMidiFile(notes: Note[], tempo: number): Uint8Array {
   const file = new Midi();
