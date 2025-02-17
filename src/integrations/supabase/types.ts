@@ -89,90 +89,6 @@ export type Database = {
         }
         Relationships: []
       }
-      processed_tracks: {
-        Row: {
-          combined_file_path: string | null
-          created_at: string | null
-          drums_file_path: string | null
-          error_message: string | null
-          freesound_samples: Json | null
-          id: string
-          melody_file_path: string | null
-          midi_data: Json | null
-          musical_analysis: Json | null
-          output_url: string | null
-          pattern_data: Json | null
-          playback_status: string | null
-          processed_audio_status: string | null
-          processed_audio_url: string | null
-          processing_status: string | null
-          processing_type: Database["public"]["Enums"]["processing_type"] | null
-          recording_id: string | null
-          tempo: number | null
-          time_signature: string | null
-          updated_at: string | null
-          version: number | null
-        }
-        Insert: {
-          combined_file_path?: string | null
-          created_at?: string | null
-          drums_file_path?: string | null
-          error_message?: string | null
-          freesound_samples?: Json | null
-          id?: string
-          melody_file_path?: string | null
-          midi_data?: Json | null
-          musical_analysis?: Json | null
-          output_url?: string | null
-          pattern_data?: Json | null
-          playback_status?: string | null
-          processed_audio_status?: string | null
-          processed_audio_url?: string | null
-          processing_status?: string | null
-          processing_type?:
-            | Database["public"]["Enums"]["processing_type"]
-            | null
-          recording_id?: string | null
-          tempo?: number | null
-          time_signature?: string | null
-          updated_at?: string | null
-          version?: number | null
-        }
-        Update: {
-          combined_file_path?: string | null
-          created_at?: string | null
-          drums_file_path?: string | null
-          error_message?: string | null
-          freesound_samples?: Json | null
-          id?: string
-          melody_file_path?: string | null
-          midi_data?: Json | null
-          musical_analysis?: Json | null
-          output_url?: string | null
-          pattern_data?: Json | null
-          playback_status?: string | null
-          processed_audio_status?: string | null
-          processed_audio_url?: string | null
-          processing_status?: string | null
-          processing_type?:
-            | Database["public"]["Enums"]["processing_type"]
-            | null
-          recording_id?: string | null
-          tempo?: number | null
-          time_signature?: string | null
-          updated_at?: string | null
-          version?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "processed_tracks_recording_id_fkey"
-            columns: ["recording_id"]
-            isOneToOne: false
-            referencedRelation: "recordings"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -200,36 +116,36 @@ export type Database = {
       recordings: {
         Row: {
           created_at: string
-          duration: number | null
+          error_message: string | null
           filename: string
           id: string
-          processed_text: string | null
-          status: Database["public"]["Enums"]["recording_status"] | null
+          processed_audio_url: string | null
+          processing_type: string | null
+          prompt: string | null
+          status: string | null
           storage_path: string
-          timestamp: string
-          user_id: string | null
         }
         Insert: {
           created_at?: string
-          duration?: number | null
+          error_message?: string | null
           filename: string
           id?: string
-          processed_text?: string | null
-          status?: Database["public"]["Enums"]["recording_status"] | null
+          processed_audio_url?: string | null
+          processing_type?: string | null
+          prompt?: string | null
+          status?: string | null
           storage_path: string
-          timestamp?: string
-          user_id?: string | null
         }
         Update: {
           created_at?: string
-          duration?: number | null
+          error_message?: string | null
           filename?: string
           id?: string
-          processed_text?: string | null
-          status?: Database["public"]["Enums"]["recording_status"] | null
+          processed_audio_url?: string | null
+          processing_type?: string | null
+          prompt?: string | null
+          status?: string | null
           storage_path?: string
-          timestamp?: string
-          user_id?: string | null
         }
         Relationships: []
       }

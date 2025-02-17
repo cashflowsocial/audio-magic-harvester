@@ -1,6 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Replicate from "https://esm.sh/replicate@0.25.2";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,43 +14,81 @@ serve(async (req) => {
   }
 
   try {
-    const { melody_url, prompt } = await req.json();
-    console.log('Processing with MusicGen:', { melody_url, prompt });
+    const { recordingId, type } = await req.json();
+    console.log('Processing with MusicGen:', { recordingId, type });
 
     const REPLICATE_API_KEY = Deno.env.get('REPLICATE_API_KEY');
     if (!REPLICATE_API_KEY) {
       throw new Error('REPLICATE_API_KEY is not set');
     }
 
+    // Initialize Supabase client
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Get the recording
+    const { data: recording, error: recordingError } = await supabase
+      .from('recordings')
+      .select('*')
+      .eq('id', recordingId)
+      .single();
+
+    if (recordingError || !recording) {
+      throw new Error('Recording not found');
+    }
+
+    // Update status to processing
+    await supabase
+      .from('recordings')
+      .update({ 
+        status: 'processing',
+        processing_type: type 
+      })
+      .eq('id', recordingId);
+
+    // Get the public URL for the recording
+    const { data: { publicUrl } } = await supabase.storage
+      .from('recordings')
+      .getPublicUrl(recording.filename);
+
     const replicate = new Replicate({
       auth: REPLICATE_API_KEY,
     });
 
-    // Prepare the input parameters for MusicGen
-    const input = {
-      model_version: "melody",
-      prompt: prompt || "Create a modern musical accompaniment",
-      duration: 8,
-      continuation: false,
-      normalization_strategy: "peak",
-      output_format: "wav",
-      temperature: 1,
-    };
-
-    // If melody URL is provided, add it to the input
-    if (melody_url) {
-      input["melody_url"] = melody_url;
-    }
-
-    console.log('Starting MusicGen generation with input:', input);
+    const prompt = type === 'drums' 
+      ? "Create a dynamic drum beat that matches this audio" 
+      : "Create a melodic accompaniment that complements this audio";
 
     // Run the MusicGen model
     const output = await replicate.run(
       "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
-      { input }
+      {
+        input: {
+          model_version: "melody",
+          prompt,
+          melody_url: publicUrl,
+          duration: 8,
+          continuation: false,
+          normalization_strategy: "peak",
+          output_format: "wav",
+          temperature: 1,
+        }
+      }
     );
 
     console.log('MusicGen generation completed:', output);
+
+    // Update recording with the processed audio URL
+    await supabase
+      .from('recordings')
+      .update({
+        status: 'completed',
+        processed_audio_url: output,
+        prompt
+      })
+      .eq('id', recordingId);
 
     return new Response(
       JSON.stringify({ output }),
@@ -59,6 +98,28 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error('Error in MusicGen processing:', error);
+    
+    // Update recording status to failed if we have the recordingId
+    try {
+      const { recordingId } = await req.json();
+      if (recordingId) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+        
+        await supabase
+          .from('recordings')
+          .update({
+            status: 'failed',
+            error_message: error.message
+          })
+          .eq('id', recordingId);
+      }
+    } catch (updateError) {
+      console.error('Error updating recording status:', updateError);
+    }
+
     return new Response(
       JSON.stringify({ error: error.message }),
       {

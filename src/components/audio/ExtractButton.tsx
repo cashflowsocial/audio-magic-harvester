@@ -1,18 +1,16 @@
 
 import { Button } from "@/components/ui/button";
-import { Drumstick, Music, Guitar, Loader2, StopCircle } from "lucide-react";
+import { Drumstick, Music, Loader2, StopCircle } from "lucide-react";
 import { PlaybackControl } from "./PlaybackControl";
-import { GuitarSamplePlayer } from "./GuitarSamplePlayer";
-import { ProcessedTrack } from "./types";
 
 interface ExtractButtonProps {
-  type: 'drums' | 'melody' | 'instrumentation';
+  type: 'drums' | 'melody';
   disabled: boolean;
   isProcessing: boolean;
   processingTime: string;
   onExtract: () => void;
   onCancel: () => void;
-  track?: ProcessedTrack;
+  audioUrl?: string;
   isPlaying: boolean;
   onPlayingChange: (playing: boolean) => void;
 }
@@ -24,14 +22,13 @@ export const ExtractButton = ({
   processingTime,
   onExtract,
   onCancel,
-  track,
+  audioUrl,
   isPlaying,
   onPlayingChange
 }: ExtractButtonProps) => {
   const icon = {
     drums: <Drumstick className="h-4 w-4" />,
-    melody: <Music className="h-4 w-4" />,
-    instrumentation: <Guitar className="h-4 w-4" />
+    melody: <Music className="h-4 w-4" />
   }[type];
 
   return (
@@ -44,7 +41,7 @@ export const ExtractButton = ({
           variant="outline"
         >
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-          {isProcessing ? `Processing ${type}... ${processingTime}` : `Extract & Create ${type}`}
+          {isProcessing ? `Processing ${type}... ${processingTime}` : `Generate ${type}`}
         </Button>
         {isProcessing && (
           <Button
@@ -57,20 +54,12 @@ export const ExtractButton = ({
           </Button>
         )}
       </div>
-      {track?.processed_audio_url && track.processing_status === 'completed' && (
-        type === 'melody' && track.freesound_samples ? (
-          <GuitarSamplePlayer
-            track={track}
-            isPlaying={isPlaying}
-            onPlayingChange={onPlayingChange}
-          />
-        ) : (
-          <PlaybackControl
-            audioUrl={track.processed_audio_url}
-            isPlaying={isPlaying}
-            onPlayingChange={onPlayingChange}
-          />
-        )
+      {audioUrl && (
+        <PlaybackControl
+          audioUrl={audioUrl}
+          isPlaying={isPlaying}
+          onPlayingChange={onPlayingChange}
+        />
       )}
     </div>
   );
