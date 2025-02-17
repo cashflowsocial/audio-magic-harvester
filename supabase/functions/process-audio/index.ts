@@ -2,14 +2,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
-// Define CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -39,64 +37,6 @@ serve(async (req) => {
       throw new Error(`Error creating processed track: ${trackError.message}`);
     }
 
-    // Get Freesound credentials
-    const clientId = Deno.env.get('FREESOUND_CLIENT_ID');
-    const clientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
-
-    if (!clientId || !clientSecret) {
-      throw new Error('Freesound credentials not found');
-    }
-
-    // Get the access token for Freesound
-    const tokenResponse = await fetch('https://freesound.org/apiv2/oauth2/token/', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'client_credentials',
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      throw new Error(`Failed to get Freesound token: ${tokenResponse.statusText}`);
-    }
-
-    const { access_token } = await tokenResponse.json();
-
-    // Search for guitar samples
-    const searchResponse = await fetch(
-      'https://freesound.org/apiv2/search/text/' +
-      '?query=guitar+single+note+electric&filter=duration:[0.1 TO 2.0]' +
-      '&fields=id,name,previews&page_size=15',
-      {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      }
-    );
-
-    if (!searchResponse.ok) {
-      throw new Error(`Failed to search Freesound: ${searchResponse.statusText}`);
-    }
-
-    const searchData = await searchResponse.json();
-    
-    // Transform the results into our desired format
-    const guitarSamples: Record<string, any> = {};
-    
-    searchData.results.forEach((result: any, index: number) => {
-      guitarSamples[`note_${index + 1}`] = {
-        id: result.id,
-        name: result.name,
-        url: result.previews['preview-hq-mp3'],
-      };
-    });
-
-    console.log('Found guitar samples:', guitarSamples);
-
     // Get the recording
     const { data: recording, error: recordingError } = await supabase
       .from('recordings')
@@ -113,6 +53,86 @@ serve(async (req) => {
       .from('recordings')
       .getPublicUrl(recording.filename);
 
+    // For melody processing, attempt to get Freesound samples
+    let guitarSamples = null;
+    if (processingType === 'melody') {
+      try {
+        // Get Freesound credentials
+        const clientId = Deno.env.get('FREESOUND_CLIENT_ID');
+        const clientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
+
+        if (!clientId || !clientSecret) {
+          console.warn('Freesound credentials not found');
+        } else {
+          console.log('Attempting Freesound authentication...');
+          
+          // Get the access token for Freesound
+          const tokenResponse = await fetch('https://freesound.org/apiv2/oauth2/token/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              client_id: clientId,
+              client_secret: clientSecret,
+              grant_type: 'client_credentials',
+            }).toString(),
+          });
+
+          if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            console.error('Freesound token error:', errorText);
+            throw new Error(`Freesound token error: ${tokenResponse.status} ${errorText}`);
+          }
+
+          const tokenData = await tokenResponse.json();
+          console.log('Got Freesound token:', tokenData.access_token ? 'Yes' : 'No');
+
+          // Search for guitar samples
+          const searchResponse = await fetch(
+            'https://freesound.org/apiv2/search/text/' +
+            '?query=guitar+single+note+electric&filter=duration:[0.1 TO 2.0]' +
+            '&fields=id,name,previews&page_size=15',
+            {
+              headers: {
+                Authorization: `Bearer ${tokenData.access_token}`,
+              },
+            }
+          );
+
+          if (!searchResponse.ok) {
+            throw new Error(`Freesound search failed: ${searchResponse.statusText}`);
+          }
+
+          const searchData = await searchResponse.json();
+          
+          // Transform the results into our desired format
+          guitarSamples = {};
+          searchData.results.forEach((result: any, index: number) => {
+            guitarSamples[`note_${index + 1}`] = {
+              id: result.id,
+              name: result.name,
+              url: result.previews['preview-hq-mp3'],
+            };
+          });
+
+          console.log('Found guitar samples:', Object.keys(guitarSamples).length);
+        }
+      } catch (freesoundError) {
+        console.error('Freesound processing error:', freesoundError);
+        // Don't fail the whole process if Freesound fails
+      }
+    }
+
+    // Generate example MIDI data for melody
+    const midiData = processingType === 'melody' ? {
+      notes: [
+        { pitch: 60, startTime: 0, endTime: 0.5, velocity: 80 },
+        { pitch: 62, startTime: 0.5, endTime: 1.0, velocity: 80 },
+      ],
+      instrument: 'guitar'
+    } : null;
+
     // Update the processed track with results
     const { error: updateError } = await supabase
       .from('processed_tracks')
@@ -120,14 +140,7 @@ serve(async (req) => {
         processing_status: 'completed',
         processed_audio_url: publicUrl,
         freesound_samples: guitarSamples,
-        midi_data: {
-          notes: [
-            // Example MIDI data - this should be replaced with actual analysis
-            { pitch: 60, startTime: 0, endTime: 0.5, velocity: 80 },
-            { pitch: 62, startTime: 0.5, endTime: 1.0, velocity: 80 },
-          ],
-          instrument: 'guitar'
-        },
+        midi_data: midiData,
       })
       .eq('id', track.id);
 
