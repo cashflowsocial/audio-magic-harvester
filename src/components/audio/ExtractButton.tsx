@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Drumstick, Music, Guitar, Loader2, StopCircle } from "lucide-react";
 import { PlaybackControl } from "./PlaybackControl";
+import { GuitarSamplePlayer } from "./GuitarSamplePlayer";
 import { ProcessedTrack } from "./types";
 
 interface ExtractButtonProps {
@@ -57,11 +58,19 @@ export const ExtractButton = ({
         )}
       </div>
       {track?.processed_audio_url && track.processing_status === 'completed' && (
-        <PlaybackControl
-          audioUrl={track.processed_audio_url}
-          isPlaying={isPlaying}
-          onPlayingChange={onPlayingChange}
-        />
+        type === 'melody' && track.freesound_samples ? (
+          <GuitarSamplePlayer
+            track={track}
+            isPlaying={isPlaying}
+            onPlayingChange={onPlayingChange}
+          />
+        ) : (
+          <PlaybackControl
+            audioUrl={track.processed_audio_url}
+            isPlaying={isPlaying}
+            onPlayingChange={onPlayingChange}
+          />
+        )
       )}
     </div>
   );
