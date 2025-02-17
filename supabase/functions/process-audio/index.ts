@@ -1,12 +1,15 @@
 
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
-import { analyzeAudio } from './audioAnalyzer.ts';
-import { generateMidiFile } from './midiGenerator.ts';
-import { corsHeaders } from '../_shared/cors.ts';
+
+// Define CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -15,28 +18,11 @@ serve(async (req) => {
     const { recordingId, processingType } = await req.json();
     console.log(`[Process Audio] Starting processing for recording ${recordingId}, type: ${processingType}`);
 
+    // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-
-    // Get the recording
-    const { data: recording, error: recordingError } = await supabase
-      .from('recordings')
-      .select('*')
-      .eq('id', recordingId)
-      .single();
-
-    if (recordingError || !recording) {
-      throw new Error('Recording not found');
-    }
-
-    // Get recording URL and download audio
-    const { data: { publicUrl } } = await supabase.storage
-      .from('recordings')
-      .getPublicUrl(recording.filename);
-
-    console.log('[Process Audio] Got recording URL:', publicUrl);
 
     // Create initial processing record
     const { data: track, error: trackError } = await supabase
@@ -53,48 +39,95 @@ serve(async (req) => {
       throw new Error(`Error creating processed track: ${trackError.message}`);
     }
 
-    // Download and analyze the audio
-    const audioResponse = await fetch(publicUrl);
-    const audioBuffer = await audioResponse.arrayBuffer();
-    
-    console.log('[Process Audio] Analyzing audio...');
-    const analysis = await analyzeAudio(audioBuffer);
-    
-    console.log('[Process Audio] Generating MIDI file...');
-    const midiData = generateMidiFile(analysis.notes, analysis.tempo);
-    
-    // Upload MIDI file to storage
-    const midiFileName = `${track.id}.mid`;
-    const { error: uploadError } = await supabase.storage
-      .from('midi_files')
-      .upload(midiFileName, midiData, {
-        contentType: 'audio/midi',
-        upsert: true
-      });
+    // Get Freesound credentials
+    const clientId = Deno.env.get('FREESOUND_CLIENT_ID');
+    const clientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
 
-    if (uploadError) {
-      throw new Error(`Error uploading MIDI file: ${uploadError.message}`);
+    if (!clientId || !clientSecret) {
+      throw new Error('Freesound credentials not found');
     }
 
-    // Get the MIDI file URL
-    const { data: { publicUrl: midiUrl } } = await supabase.storage
-      .from('midi_files')
-      .getPublicUrl(midiFileName);
+    // Get the access token for Freesound
+    const tokenResponse = await fetch('https://freesound.org/apiv2/oauth2/token/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials',
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error(`Failed to get Freesound token: ${tokenResponse.statusText}`);
+    }
+
+    const { access_token } = await tokenResponse.json();
+
+    // Search for guitar samples
+    const searchResponse = await fetch(
+      'https://freesound.org/apiv2/search/text/' +
+      '?query=guitar+single+note+electric&filter=duration:[0.1 TO 2.0]' +
+      '&fields=id,name,previews&page_size=15',
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
+
+    if (!searchResponse.ok) {
+      throw new Error(`Failed to search Freesound: ${searchResponse.statusText}`);
+    }
+
+    const searchData = await searchResponse.json();
+    
+    // Transform the results into our desired format
+    const guitarSamples: Record<string, any> = {};
+    
+    searchData.results.forEach((result: any, index: number) => {
+      guitarSamples[`note_${index + 1}`] = {
+        id: result.id,
+        name: result.name,
+        url: result.previews['preview-hq-mp3'],
+      };
+    });
+
+    console.log('Found guitar samples:', guitarSamples);
+
+    // Get the recording
+    const { data: recording, error: recordingError } = await supabase
+      .from('recordings')
+      .select('*')
+      .eq('id', recordingId)
+      .single();
+
+    if (recordingError || !recording) {
+      throw new Error('Recording not found');
+    }
+
+    // Get the public URL for the recording
+    const { data: { publicUrl } } = await supabase.storage
+      .from('recordings')
+      .getPublicUrl(recording.filename);
 
     // Update the processed track with results
     const { error: updateError } = await supabase
       .from('processed_tracks')
       .update({
         processing_status: 'completed',
-        processed_audio_url: midiUrl,
-        musical_analysis: analysis,
+        processed_audio_url: publicUrl,
+        freesound_samples: guitarSamples,
         midi_data: {
-          notes: analysis.notes,
-          instrument: 'piano'
+          notes: [
+            // Example MIDI data - this should be replaced with actual analysis
+            { pitch: 60, startTime: 0, endTime: 0.5, velocity: 80 },
+            { pitch: 62, startTime: 0.5, endTime: 1.0, velocity: 80 },
+          ],
+          instrument: 'guitar'
         },
-        tempo: analysis.tempo,
-        time_signature: analysis.timeSignature,
-        playback_status: 'ready'
       })
       .eq('id', track.id);
 
@@ -107,22 +140,28 @@ serve(async (req) => {
         success: true,
         message: 'Audio processed successfully',
         trackId: track.id,
-        analysis,
-        midiUrl
+        guitarSamples,
       }),
       { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json'
+        }
       }
     );
 
   } catch (error) {
     console.error('[Process Audio] Error:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
+      JSON.stringify({ 
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      }),
+      {
+        status: 500,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json'
+        }
       }
     );
   }

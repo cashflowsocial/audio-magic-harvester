@@ -120,12 +120,6 @@ export const useAudioProcessing = (recordingId: string | null) => {
         description: `Successfully extracted ${type}!`,
       });
 
-      // Store the MIDI pattern data
-      if (response.data.midiPattern) {
-        console.log('MIDI Pattern:', response.data.midiPattern);
-        // TODO: Use this data to play back using Freesound samples
-      }
-
       return response.data;
     } catch (error) {
       console.error(`Error extracting ${type}:`, error);
