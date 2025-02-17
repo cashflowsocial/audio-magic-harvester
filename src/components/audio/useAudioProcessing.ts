@@ -3,7 +3,18 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
-import { ProcessedTrack } from "./types";
+
+interface Recording {
+  id: string;
+  created_at: string;
+  filename: string;
+  storage_path: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  processed_audio_url?: string;
+  error_message?: string;
+  processing_type?: 'drums' | 'melody';
+  prompt?: string;
+}
 
 export const useAudioProcessing = (recordingId: string | null) => {
   const { toast } = useToast();
@@ -11,34 +22,23 @@ export const useAudioProcessing = (recordingId: string | null) => {
   const [processingType, setProcessingType] = useState<string | null>(null);
   const [startTimes, setStartTimes] = useState<Record<string, number>>({});
 
-  const { data: processedTracks, refetch } = useQuery({
-    queryKey: ['processed-tracks', recordingId],
+  const { data: recording, refetch } = useQuery({
+    queryKey: ['recording', recordingId],
     queryFn: async () => {
-      if (!recordingId) return [];
+      if (!recordingId) return null;
       const { data, error } = await supabase
-        .from('processed_tracks')
+        .from('recordings')
         .select('*')
-        .eq('recording_id', recordingId)
-        .order('created_at', { ascending: false });
+        .eq('id', recordingId)
+        .single();
       
       if (error) throw error;
-
-      // Transform the data to match ProcessedTrack type
-      const transformedData = (data || []).map(track => ({
-        ...track,
-        midi_data: track.midi_data as ProcessedTrack['midi_data'],
-        pattern_data: track.pattern_data as ProcessedTrack['pattern_data'],
-        freesound_samples: track.freesound_samples as ProcessedTrack['freesound_samples']
-      }));
-
-      return transformedData as ProcessedTrack[];
+      return data as Recording;
     },
     enabled: !!recordingId,
     refetchInterval: (query) => {
-      const data = query.state.data as ProcessedTrack[] | undefined;
-      if (!Array.isArray(data)) return false;
-      const hasProcessingTracks = data.some(track => track.processing_status === 'processing');
-      return hasProcessingTracks ? 3000 : false;
+      const data = query.state.data as Recording | null;
+      return data?.status === 'processing' ? 3000 : false;
     }
   });
 
@@ -46,21 +46,14 @@ export const useAudioProcessing = (recordingId: string | null) => {
     if (!recordingId) return;
 
     try {
-      const tracksToCancel = processedTracks?.filter(t => 
-        t.processing_type === type && 
-        t.processing_status === 'processing'
-      );
-
-      if (tracksToCancel && tracksToCancel.length > 0) {
-        for (const track of tracksToCancel) {
-          await supabase
-            .from('processed_tracks')
-            .update({ 
-              processing_status: 'failed',
-              error_message: 'Processing cancelled by user'
-            })
-            .eq('id', track.id);
-        }
+      if (recording?.status === 'processing' && recording.processing_type === type) {
+        await supabase
+          .from('recordings')
+          .update({ 
+            status: 'failed',
+            error_message: 'Processing cancelled by user'
+          })
+          .eq('id', recordingId);
 
         await refetch();
         setProcessingType(null);
@@ -85,14 +78,10 @@ export const useAudioProcessing = (recordingId: string | null) => {
     }
   };
 
-  const handleExtract = async (type: 'drums' | 'melody' | 'instrumentation') => {
+  const handleExtract = async (type: 'drums' | 'melody') => {
     if (!recordingId) return;
 
-    const existingProcessing = processedTracks?.find(
-      t => t.processing_type === type && t.processing_status === 'processing'
-    );
-    
-    if (existingProcessing) {
+    if (recording?.status === 'processing') {
       await handleCancel(type);
     }
 
@@ -105,8 +94,8 @@ export const useAudioProcessing = (recordingId: string | null) => {
     });
 
     try {
-      const response = await supabase.functions.invoke('process-audio', {
-        body: { recordingId, processingType: type }
+      const response = await supabase.functions.invoke('process-audio-musicgen', {
+        body: { recordingId, type }
       });
 
       if (response.error) {
@@ -139,13 +128,12 @@ export const useAudioProcessing = (recordingId: string | null) => {
   };
 
   return {
-    processedTracks,
+    recording,
     playingType,
     setPlayingType,
     processingType,
     handleCancel,
     handleExtract,
-    getTrackByType: (type: string) => processedTracks?.find(track => track.processing_type === type),
     getProcessingTime: (type: string) => {
       const startTime = startTimes[type];
       if (!startTime) return '';
