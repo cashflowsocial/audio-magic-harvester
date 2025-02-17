@@ -1,12 +1,6 @@
-
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { ProcessingType, ProcessingResult, DrumPattern } from './types.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
-
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const freesoundClientId = Deno.env.get('FREESOUND_CLIENT_ID');
-const freesoundClientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { transcribe } from 'https://esm.sh/@ AssemblyAI / deno-sdk @ 0.0.2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,7 +8,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -29,28 +22,57 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // First, get our default drum kit samples
-    const { data: drumKit, error: drumKitError } = await supabase
-      .from('drum_kits')
-      .select(`
-        id,
-        name,
-        drum_kit_samples (
-          id,
-          sample_type,
-          storage_path
-        )
-      `)
-      .eq('name', 'Default Kit')
-      .single();
+    // Get Freesound credentials
+    const clientId = Deno.env.get('FREESOUND_CLIENT_ID');
+    const clientSecret = Deno.env.get('FREESOUND_CLIENT_SECRET');
 
-    if (drumKitError || !drumKit) {
-      throw new Error('Default drum kit not found');
+    if (!clientId || !clientSecret) {
+      throw new Error('Freesound credentials not found');
     }
 
-    console.log('[Process Audio] Using drum kit:', drumKit);
+    // Get the access token for Freesound
+    const tokenResponse = await fetch('https://freesound.org/apiv2/oauth2/token/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials',
+      }),
+    });
 
-    // Get the recording URL
+    const { access_token } = await tokenResponse.json();
+
+    // Search for guitar samples
+    const searchResponse = await fetch(
+      'https://freesound.org/apiv2/search/text/' +
+      '?query=guitar+single+note+electric&filter=duration:[0.1 TO 2.0]' +
+      '&fields=id,name,previews&page_size=15',
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
+
+    const searchData = await searchResponse.json();
+    
+    // Transform the results into our desired format
+    const guitarSamples: Record<string, any> = {};
+    
+    searchData.results.forEach((result: any, index: number) => {
+      guitarSamples[`note_${index + 1}`] = {
+        id: result.id,
+        name: result.name,
+        url: result.previews['preview-hq-mp3'],
+      };
+    });
+
+    console.log('Found guitar samples:', guitarSamples);
+
+    // Get the recording URL and continue with existing processing
     const { data: recording, error: recordingError } = await supabase
       .from('recordings')
       .select('*')
@@ -66,130 +88,23 @@ serve(async (req) => {
       .from('recordings')
       .getPublicUrl(recording.filename);
 
-    // First, transcribe the audio using Whisper
-    const audioResponse = await fetch(publicUrl);
-    const audioBlob = await audioResponse.blob();
-    const formData = new FormData();
-    formData.append('file', audioBlob);
-    formData.append('model', 'whisper-1');
+		console.log("[Process Audio] Audio URL:", publicUrl);
 
-    const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-      },
-      body: formData,
-    });
+		// Transcribe the audio using AssemblyAI
+		console.log("[Process Audio] Starting transcription with AssemblyAI...");
+		const transcription = await transcribe({
+			apiKey: Deno.env.get('ASSEMBLYAI_API_KEY') ?? '',
+			audioUrl: publicUrl,
+		});
 
-    if (!transcriptionResponse.ok) {
-      throw new Error(`Whisper API error: ${await transcriptionResponse.text()}`);
-    }
+		console.log("[Process Audio] Transcription completed:", transcription.text);
 
-    const transcription = await transcriptionResponse.json();
-    console.log('[Audio Processor] Transcription result:', transcription);
-
-    // Create a mapping of available samples to provide to GPT
-    const sampleMapping = drumKit.drum_kit_samples.reduce((acc, sample) => {
-      acc[sample.sample_type] = sample.id;
-      return acc;
-    }, {});
-
-    // Now analyze the transcription with GPT-4 to create a drum pattern
-    const gptResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a drum pattern expert that can interpret beatbox sounds and vocal drum imitations into precise drum patterns.
-            
-            Available drum samples:
-            ${JSON.stringify(sampleMapping, null, 2)}
-            
-            When you receive a transcription of vocal drum sounds:
-            1. First identify the tempo by analyzing the rhythm and spacing of the sounds
-            2. Determine the time signature from the pattern repetition
-            3. Map each sound to the corresponding drum:
-               - Low sounds like "boom", "bm", "b", "puh" = Kick drum
-               - Sharp sounds like "psh", "ka", "ts" = Snare drum
-               - High sounds like "ts", "ch", "tss" = Hi-hat
-               - Crash-like sounds = Crash cymbal
-            4. Position each drum hit on a numerical timeline where:
-               - 1 = first beat
-               - 1.5 = eighth note after first beat
-               - 2 = second beat
-               etc.
-            
-            Return ONLY a valid JSON object with this exact format:
-            {
-              "tempo": number (between 60-200),
-              "timeSignature": string (e.g. "4/4"),
-              "pattern": {
-                "kick": number[] (beat positions),
-                "snare": number[] (beat positions),
-                "hihat": number[] (beat positions),
-                "crash": number[] (beat positions)
-              },
-              "sampleIds": {
-                "kick": string (sample ID),
-                "snare": string (sample ID),
-                "hihat": string (sample ID),
-                "crash": string (sample ID)
-              }
-            }`
-          },
-          {
-            role: 'user',
-            content: `Analyze these sounds carefully and create a precise musical pattern: ${transcription.text}`
-          }
-        ],
-        temperature: 0.3,
-      }),
-    });
-
-    if (!gptResponse.ok) {
-      throw new Error(`GPT API error: ${await gptResponse.text()}`);
-    }
-
-    const analysis = await gptResponse.json();
-    console.log('[Audio Processor] Pattern analysis:', analysis);
-
-    const pattern = JSON.parse(analysis.choices[0].message.content) as DrumPattern & {
-      sampleIds: Record<string, string>;
-    };
-
-    // Save the MIDI pattern
-    const { data: midiPattern, error: midiError } = await supabase
-      .from('midi_patterns')
-      .insert({
-        recording_id: recordingId,
-        pattern_data: pattern.pattern,
-        tempo: pattern.tempo,
-        time_signature: pattern.timeSignature,
-        freesound_samples: pattern.sampleIds
-      })
-      .select()
-      .single();
-
-    if (midiError) {
-      throw new Error(`Failed to save MIDI pattern: ${midiError.message}`);
-    }
-
+    // Update the response to include guitar samples
     return new Response(
       JSON.stringify({
         success: true,
-        midiPattern,
+        guitarSamples,
         transcription: transcription.text,
-        analysis: pattern,
-        drumKit: {
-          id: drumKit.id,
-          samples: drumKit.drum_kit_samples
-        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
