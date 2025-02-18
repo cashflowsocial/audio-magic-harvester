@@ -57,12 +57,12 @@ serve(async (req) => {
       auth: REPLICATE_API_KEY,
     });
 
-    // Enhanced prompts for better melody matching
+    // More specific prompts focusing on exact reproduction
     const prompt = type === 'drums' 
-      ? "Create a drum beat that precisely follows the rhythm of this audio. Match the exact tempo and intensity." 
-      : "Accurately recreate the hummed melody in this audio. Follow the exact pitch, rhythm, and tempo of the humming. Maintain the original melodic contour and phrasing.";
+      ? "Replicate this exact rhythm pattern. Keep the same tempo and intensity, just clean up the timing." 
+      : "Replicate this exact melody note for note. Keep the same melody line but adjust the pitch to the nearest musical note and quantize the timing. Do not add harmonies or change the melody in any way.";
 
-    // Run the MusicGen model with adjusted parameters
+    // Run the MusicGen model with fine-tuned parameters
     const output = await replicate.run(
       "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
       {
@@ -72,9 +72,12 @@ serve(async (req) => {
           melody_url: publicUrl,
           duration: 8,
           continuation: false,
-          normalization_strategy: "loudness",  // Changed to loudness for better dynamics preservation
+          normalization_strategy: "loudness",
           output_format: "wav",
-          temperature: 0.7,  // Reduced temperature for more faithful reproduction
+          temperature: 0.4,  // Further reduced temperature for even more precise reproduction
+          classifier_free_guidance: 15,  // Increased guidance for closer adherence to input
+          top_k: 50,  // Reduced from default to maintain closer similarity
+          top_p: 0.7   // Reduced from default to maintain closer similarity
         }
       }
     );
