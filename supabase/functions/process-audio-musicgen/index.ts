@@ -57,12 +57,12 @@ serve(async (req) => {
       auth: REPLICATE_API_KEY,
     });
 
-    // Prompts focusing on single-instrument reproduction
+    // Strict prompt focusing on exact melody reproduction
     const prompt = type === 'drums' 
       ? "Create a simple drum pattern using only a basic drum kit. No additional percussion or effects." 
-      : "Reproduce this melody using only a clean electric guitar sound. No accompaniment, no effects, no other instruments. Match the exact notes and timing of the input melody, but clean up the pitch to the nearest musical note. Single instrument only.";
+      : "STRICTLY copy the exact melody from the input audio, note for note, using a clean electric guitar sound. Do not add, remove, or change any notes. Do not add any variation, harmonies, or creative interpretation. Simply convert the hummed notes to clean guitar notes with the same rhythm and melody. No other instruments, no effects, no creativity.";
 
-    // Run the MusicGen model with parameters optimized for single-instrument output
+    // Run the MusicGen model with extremely strict parameters
     const output = await replicate.run(
       "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
       {
@@ -74,10 +74,10 @@ serve(async (req) => {
           continuation: false,
           normalization_strategy: "loudness",
           output_format: "wav",
-          temperature: 0.1,  // Very low temperature to minimize creative variations
-          classifier_free_guidance: 20,  // Increased guidance for stricter adherence to prompt
-          top_k: 10,  // Heavily restricted sampling for more consistent output
-          top_p: 0.5   // Further reduced to constrain creative freedom
+          temperature: 0.0,  // Zero temperature to completely eliminate creative variation
+          classifier_free_guidance: 30,  // Maximum guidance for absolute adherence to input
+          top_k: 1,  // Most restrictive sampling possible
+          top_p: 0.1  // Extremely restricted to prevent any deviation
         }
       }
     );
