@@ -61,12 +61,12 @@ serve(async (req) => {
       ? "Create a dynamic drum beat that matches this audio" 
       : "Create a melodic accompaniment that complements this audio";
 
-    // Run the MusicGen model
+    // Run the MusicGen model with the correct model_version
     const output = await replicate.run(
       "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
       {
         input: {
-          model_version: "melody",
+          model_version: "melody-large", // Updated to use a valid model version
           prompt,
           melody_url: publicUrl,
           duration: 8,
