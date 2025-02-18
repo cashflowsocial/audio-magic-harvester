@@ -57,12 +57,12 @@ serve(async (req) => {
       auth: REPLICATE_API_KEY,
     });
 
-    // More specific prompts focusing on exact reproduction
+    // Prompts focusing on single-instrument reproduction
     const prompt = type === 'drums' 
-      ? "Replicate this exact rhythm pattern. Keep the same tempo and intensity, just clean up the timing." 
-      : "Replicate this exact melody note for note. Keep the same melody line but adjust the pitch to the nearest musical note and quantize the timing. Do not add harmonies or change the melody in any way.";
+      ? "Create a simple drum pattern using only a basic drum kit. No additional percussion or effects." 
+      : "Reproduce this melody using only a clean electric guitar sound. No accompaniment, no effects, no other instruments. Match the exact notes and timing of the input melody, but clean up the pitch to the nearest musical note. Single instrument only.";
 
-    // Run the MusicGen model with fine-tuned parameters
+    // Run the MusicGen model with parameters optimized for single-instrument output
     const output = await replicate.run(
       "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
       {
@@ -74,10 +74,10 @@ serve(async (req) => {
           continuation: false,
           normalization_strategy: "loudness",
           output_format: "wav",
-          temperature: 0.4,  // Further reduced temperature for even more precise reproduction
-          classifier_free_guidance: 15,  // Increased guidance for closer adherence to input
-          top_k: 50,  // Reduced from default to maintain closer similarity
-          top_p: 0.7   // Reduced from default to maintain closer similarity
+          temperature: 0.1,  // Very low temperature to minimize creative variations
+          classifier_free_guidance: 20,  // Increased guidance for stricter adherence to prompt
+          top_k: 10,  // Heavily restricted sampling for more consistent output
+          top_p: 0.5   // Further reduced to constrain creative freedom
         }
       }
     );
