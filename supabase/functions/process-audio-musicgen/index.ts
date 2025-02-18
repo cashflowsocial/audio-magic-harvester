@@ -57,10 +57,10 @@ serve(async (req) => {
       auth: REPLICATE_API_KEY,
     });
 
-    // Strict prompt focusing on exact melody reproduction
+    // Strict prompt focusing on exact melody reproduction with flute
     const prompt = type === 'drums' 
       ? "Create a simple drum pattern using only a basic drum kit. No additional percussion or effects." 
-      : "STRICTLY copy the exact melody from the input audio, note for note, using a clean electric guitar sound. Do not add, remove, or change any notes. Do not add any variation, harmonies, or creative interpretation. Simply convert the hummed notes to clean guitar notes with the same rhythm and melody. No other instruments, no effects, no creativity.";
+      : "STRICTLY copy the exact melody from the input audio, note for note, using a solo flute sound. Do not add, remove, or change any notes. Do not add any variation, harmonies, or creative interpretation. Simply convert the hummed notes to clean flute notes with the same rhythm and melody. No other instruments, no effects, no creativity.";
 
     // Run the MusicGen model with extremely strict parameters
     const output = await replicate.run(
