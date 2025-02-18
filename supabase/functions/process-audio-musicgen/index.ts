@@ -57,23 +57,24 @@ serve(async (req) => {
       auth: REPLICATE_API_KEY,
     });
 
+    // Enhanced prompts for better melody matching
     const prompt = type === 'drums' 
-      ? "Create a dynamic drum beat that matches this audio" 
-      : "Create a melodic accompaniment that complements this audio";
+      ? "Create a drum beat that precisely follows the rhythm of this audio. Match the exact tempo and intensity." 
+      : "Accurately recreate the hummed melody in this audio. Follow the exact pitch, rhythm, and tempo of the humming. Maintain the original melodic contour and phrasing.";
 
-    // Run the MusicGen model with the correct model_version
+    // Run the MusicGen model with adjusted parameters
     const output = await replicate.run(
       "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
       {
         input: {
-          model_version: "melody-large", // Updated to use a valid model version
+          model_version: "melody-large",
           prompt,
           melody_url: publicUrl,
           duration: 8,
           continuation: false,
-          normalization_strategy: "peak",
+          normalization_strategy: "loudness",  // Changed to loudness for better dynamics preservation
           output_format: "wav",
-          temperature: 1,
+          temperature: 0.7,  // Reduced temperature for more faithful reproduction
         }
       }
     );
