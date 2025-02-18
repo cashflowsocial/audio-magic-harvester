@@ -15,7 +15,7 @@ serve(async (req) => {
 
   try {
     const { recordingId, type } = await req.json();
-    console.log('Processing with MusicGen:', { recordingId, type });
+    console.log('Processing audio to MIDI:', { recordingId, type });
 
     const REPLICATE_API_KEY = Deno.env.get('REPLICATE_API_KEY');
     if (!REPLICATE_API_KEY) {
@@ -57,40 +57,31 @@ serve(async (req) => {
       auth: REPLICATE_API_KEY,
     });
 
-    // Strict prompt focusing on exact melody reproduction with flute
-    const prompt = type === 'drums' 
-      ? "Create a simple drum pattern using only a basic drum kit. No additional percussion or effects." 
-      : "STRICTLY copy the exact melody from the input audio, note for note, using a solo flute sound. Do not add, remove, or change any notes. Do not add any variation, harmonies, or creative interpretation. Simply convert the hummed notes to clean flute notes with the same rhythm and melody. No other instruments, no effects, no creativity.";
-
-    // Run the MusicGen model with extremely strict parameters
+    // Use basic-pitch model for MIDI extraction
+    // This model focuses solely on monophonic melody extraction to MIDI
     const output = await replicate.run(
-      "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
+      "spotify/basic-pitch:ee980ff5937c5936cf5c6c96da5d6d1c0befeca9bd6eda0c88d3da3985ea656f",
       {
         input: {
-          model_version: "melody-large",
-          prompt,
-          melody_url: publicUrl,
-          duration: 8,
-          continuation: false,
-          normalization_strategy: "loudness",
-          output_format: "wav",
-          temperature: 0.0,  // Zero temperature to completely eliminate creative variation
-          classifier_free_guidance: 30,  // Maximum guidance for absolute adherence to input
-          top_k: 1,  // Most restrictive sampling possible
-          top_p: 0.1  // Extremely restricted to prevent any deviation
+          audio: publicUrl,
+          sampleRate: 44100,
+          model: "melody",  // Focus on melody only
+          minNoteLength: 0.05,  // Capture short notes
+          inferOnsets: true,  // Better note start detection
+          onlyMonophonic: true  // Force single-note melody
         }
       }
     );
 
-    console.log('MusicGen generation completed:', output);
+    console.log('MIDI extraction completed:', output);
 
-    // Update recording with the processed audio URL
+    // Update recording with the processed MIDI URL
     await supabase
       .from('recordings')
       .update({
         status: 'completed',
         processed_audio_url: output,
-        prompt
+        prompt: "MIDI melody extraction"
       })
       .eq('id', recordingId);
 
@@ -101,9 +92,8 @@ serve(async (req) => {
       }
     );
   } catch (error) {
-    console.error('Error in MusicGen processing:', error);
+    console.error('Error in MIDI processing:', error);
     
-    // Update recording status to failed if we have the recordingId
     try {
       const { recordingId } = await req.json();
       if (recordingId) {
