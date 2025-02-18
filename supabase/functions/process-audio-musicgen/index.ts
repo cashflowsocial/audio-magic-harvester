@@ -1,6 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Replicate from "https://esm.sh/replicate@0.25.2";
+import { HfInference } from 'https://esm.sh/@huggingface/inference@2.6.4';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const corsHeaders = {
@@ -17,10 +17,8 @@ serve(async (req) => {
     const { recordingId, type } = await req.json();
     console.log('Processing with MusicGen:', { recordingId, type });
 
-    const REPLICATE_API_KEY = Deno.env.get('REPLICATE_API_KEY');
-    if (!REPLICATE_API_KEY) {
-      throw new Error('REPLICATE_API_KEY is not set');
-    }
+    // Initialize Hugging Face client with API key
+    const hf = new HfInference(Deno.env.get('HUGGING_FACE_API_KEY'));
 
     // Initialize Supabase client
     const supabase = createClient(
@@ -53,45 +51,57 @@ serve(async (req) => {
       .from('recordings')
       .getPublicUrl(recording.filename);
 
-    const replicate = new Replicate({
-      auth: REPLICATE_API_KEY,
-    });
-
     const prompt = type === 'drums' 
       ? "Create a dynamic drum beat that matches this audio" 
       : "Create a melodic accompaniment that complements this audio";
 
-    // Run the MusicGen model
-    const output = await replicate.run(
-      "meta/musicgen:b05b1dff1d8c6dc63d14b0cdb42135378dcb87f6373b0d3d341ede46e59e2b38",
-      {
-        input: {
-          model_version: "melody",
-          prompt,
-          melody_url: publicUrl,
-          duration: 8,
-          continuation: false,
-          normalization_strategy: "peak",
-          output_format: "wav",
-          temperature: 1,
-        }
+    // Process with MusicGen using Hugging Face
+    console.log('Starting MusicGen processing with prompt:', prompt);
+    const output = await hf.audioToAudio({
+      model: 'facebook/musicgen-small',
+      data: publicUrl,
+      parameters: {
+        prompt,
       }
-    );
+    });
 
-    console.log('MusicGen generation completed:', output);
+    if (!output) {
+      throw new Error('MusicGen processing failed to return output');
+    }
+
+    // Convert the audio output to a URL
+    const audioBlob = new Blob([output], { type: 'audio/wav' });
+    const processedFilename = `processed-${recording.filename}`;
+    
+    // Upload processed audio to Supabase storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('recordings')
+      .upload(processedFilename, audioBlob);
+
+    if (uploadError) {
+      throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
+    }
+
+    // Get the URL for the processed audio
+    const { data: { publicUrl: processedUrl } } = await supabase.storage
+      .from('recordings')
+      .getPublicUrl(processedFilename);
 
     // Update recording with the processed audio URL
     await supabase
       .from('recordings')
       .update({
         status: 'completed',
-        processed_audio_url: output,
+        processed_audio_url: processedUrl,
         prompt
       })
       .eq('id', recordingId);
 
     return new Response(
-      JSON.stringify({ output }),
+      JSON.stringify({ 
+        success: true,
+        processedUrl 
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
