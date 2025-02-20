@@ -4,7 +4,8 @@ import { Drumstick, Music, Loader2, StopCircle } from "lucide-react";
 import { PlaybackControl } from "./PlaybackControl";
 
 interface ExtractButtonProps {
-  type: 'drums' | 'melody';
+  type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody';
+  displayName: string;
   disabled: boolean;
   isProcessing: boolean;
   processingTime: string;
@@ -17,6 +18,7 @@ interface ExtractButtonProps {
 
 export const ExtractButton = ({
   type,
+  displayName,
   disabled,
   isProcessing,
   processingTime,
@@ -26,10 +28,9 @@ export const ExtractButton = ({
   isPlaying,
   onPlayingChange
 }: ExtractButtonProps) => {
-  const icon = {
-    drums: <Drumstick className="h-4 w-4" />,
-    melody: <Music className="h-4 w-4" />
-  }[type];
+  const icon = type.includes('drums') ? 
+    <Drumstick className="h-4 w-4" /> : 
+    <Music className="h-4 w-4" />;
 
   return (
     <div className="space-y-2">
@@ -41,7 +42,7 @@ export const ExtractButton = ({
           variant="outline"
         >
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-          {isProcessing ? `Processing ${type}... ${processingTime}` : `Generate ${type}`}
+          {isProcessing ? `Processing ${displayName}... ${processingTime}` : displayName}
         </Button>
         {isProcessing && (
           <Button

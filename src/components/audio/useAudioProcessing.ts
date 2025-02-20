@@ -12,7 +12,7 @@ interface Recording {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   processed_audio_url?: string;
   error_message?: string;
-  processing_type?: 'drums' | 'melody';
+  processing_type?: 'drums' | 'melody' | 'hf-drums' | 'hf-melody';
   prompt?: string;
 }
 
@@ -78,7 +78,7 @@ export const useAudioProcessing = (recordingId: string | null) => {
     }
   };
 
-  const handleExtract = async (type: 'drums' | 'melody') => {
+  const handleExtract = async (type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody') => {
     if (!recordingId) return;
 
     if (recording?.status === 'processing') {
@@ -94,7 +94,8 @@ export const useAudioProcessing = (recordingId: string | null) => {
     });
 
     try {
-      const response = await supabase.functions.invoke('process-audio-musicgen', {
+      const endpoint = type.startsWith('hf') ? 'process-audio-huggingface' : 'process-audio-musicgen';
+      const response = await supabase.functions.invoke(endpoint, {
         body: { recordingId, type }
       });
 
