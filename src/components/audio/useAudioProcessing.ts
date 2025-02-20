@@ -26,14 +26,20 @@ export const useAudioProcessing = (recordingId: string | null) => {
     queryKey: ['recording', recordingId],
     queryFn: async () => {
       if (!recordingId) return null;
-      const { data, error } = await supabase
-        .from('recordings')
-        .select('*')
-        .eq('id', recordingId)
-        .single();
       
-      if (error) throw error;
-      return data as Recording;
+      try {
+        const { data, error } = await supabase
+          .from('recordings')
+          .select('*')
+          .eq('id', recordingId)
+          .single();
+        
+        if (error) throw error;
+        return data as Recording;
+      } catch (error) {
+        console.error('Error fetching recording:', error);
+        throw error;
+      }
     },
     enabled: !!recordingId,
     refetchInterval: (query) => {
@@ -95,12 +101,14 @@ export const useAudioProcessing = (recordingId: string | null) => {
 
     try {
       const endpoint = type.startsWith('hf') ? 'process-audio-huggingface' : 'process-audio-musicgen';
-      const response = await supabase.functions.invoke(endpoint, {
+      
+      // Make the request with proper error handling
+      const { data, error } = await supabase.functions.invoke(endpoint, {
         body: { recordingId, type }
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Processing failed');
+      if (error) {
+        throw new Error(error.message || 'Processing failed');
       }
 
       await refetch();
@@ -110,7 +118,7 @@ export const useAudioProcessing = (recordingId: string | null) => {
         description: `Successfully extracted ${type}!`,
       });
 
-      return response.data;
+      return data;
     } catch (error) {
       console.error(`Error extracting ${type}:`, error);
       toast({
