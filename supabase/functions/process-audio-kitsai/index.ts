@@ -119,7 +119,7 @@ serve(async (req) => {
     console.log(`Using fixed model ID: ${modelId} for ${type}`);
 
     // Prepare request body for voice generation
-    const generateEndpoint = `https://arpeggi.io/api/kits/v1/voice-models/${modelId}/generate`;
+    const generateEndpoint = `https://arpeggi.io/api/kits/v1/voice-models/${modelId}`;
     
     const requestBody = {
       audio: `data:audio/wav;base64,${base64Data}`
