@@ -111,94 +111,9 @@ serve(async (req) => {
     }
     const base64Data = btoa(binary);
 
-    // First, fetch available voice models to get the correct IDs
-    console.log('Fetching available voice models from Arpeggi/Kits.ai...');
-    const modelsResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-models', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${kitsApiKey}`
-      }
-    });
-
-    if (!modelsResponse.ok) {
-      const errorText = await modelsResponse.text();
-      console.error(`Error fetching voice models: ${modelsResponse.status} - ${errorText}`);
-      
-      await supabase
-        .from('recordings')
-        .update({
-          status: 'failed',
-          error_message: `Error fetching voice models: ${modelsResponse.status} - ${errorText}`
-        })
-        .eq('id', recordingId);
-        
-      return new Response(
-        JSON.stringify({ error: `Error fetching voice models: ${modelsResponse.status}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
-
-    const modelsData = await modelsResponse.json();
-    console.log('Available voice models:', JSON.stringify(modelsData));
-
-    // Find the right model ID based on the requested type
-    let modelId;
-    let modelName;
-
-    if (type === 'kits-drums') {
-      modelName = "Gritty Tape Drums";
-      // Find the model with the name "Gritty Tape Drums" or a similar match
-      const drumsModel = modelsData.find((model: any) => 
-        model.name.toLowerCase().includes('gritty') && 
-        model.name.toLowerCase().includes('tape') && 
-        model.name.toLowerCase().includes('drums')
-      );
-      
-      if (drumsModel) {
-        modelId = drumsModel.id;
-      } else {
-        // Use a fallback or the first drums model available
-        const fallbackModel = modelsData.find((model: any) => 
-          model.name.toLowerCase().includes('drums')
-        );
-        
-        if (fallbackModel) {
-          modelId = fallbackModel.id;
-          modelName = fallbackModel.name;
-        } else {
-          throw new Error('No suitable drums voice model found');
-        }
-      }
-    } else { // kits-melody
-      modelName = "Female Rock/Pop";
-      // Find the model with the name "Female Rock/Pop" or a similar match
-      const melodyModel = modelsData.find((model: any) => 
-        model.name.toLowerCase().includes('female') && 
-        (model.name.toLowerCase().includes('rock') || model.name.toLowerCase().includes('pop'))
-      );
-      
-      if (melodyModel) {
-        modelId = melodyModel.id;
-      } else {
-        // Use a fallback melodic voice
-        const fallbackModel = modelsData.find((model: any) => 
-          !model.name.toLowerCase().includes('drums')
-        );
-        
-        if (fallbackModel) {
-          modelId = fallbackModel.id;
-          modelName = fallbackModel.name;
-        } else {
-          throw new Error('No suitable melodic voice model found');
-        }
-      }
-    }
-
-    if (!modelId) {
-      throw new Error(`Could not find appropriate voice model for ${type}`);
-    }
-
-    console.log(`Selected model ID: ${modelId} (${modelName}) for ${type}`);
+    // Use the fixed model ID for both drums and melody
+    const modelId = '110784';
+    console.log(`Using fixed model ID: ${modelId} for ${type}`);
 
     // Prepare request body for voice generation
     const generateEndpoint = `https://arpeggi.io/api/kits/v1/voice-models/${modelId}/generate`;
