@@ -16,8 +16,11 @@ serve(async (req) => {
   let recordingId: string | null = null;
   
   try {
+    // Create a copy of the request before consuming it
+    const clonedReq = req.clone();
+    
     // Get the request body and store recordingId in the outer scope
-    const body = await req.json();
+    const body = await clonedReq.json();
     recordingId = body.recordingId;
     const type = body.type;
     
