@@ -118,48 +118,81 @@ serve(async (req) => {
     const modelId = '110784';
     console.log(`Using fixed model ID: ${modelId} for ${type}`);
 
-    // Prepare request body for voice generation
-    const generateEndpoint = `https://arpeggi.io/api/kits/v1/voice-models/${modelId}`;
+    // Fetch the voice model using GET
+    const modelEndpoint = `https://arpeggi.io/api/kits/v1/voice-models/${modelId}`;
+    console.log(`Fetching model from: ${modelEndpoint}`);
     
-    const requestBody = {
-      audio: `data:audio/wav;base64,${base64Data}`
-    };
-
-    console.log(`Sending request to Kits.ai voice generation endpoint: ${generateEndpoint}`);
-
-    // Send request to Kits.ai API for voice generation
-    const kitsResponse = await fetch(generateEndpoint, {
-      method: 'GET',  // Use GET for generation
+    const modelResponse = await fetch(modelEndpoint, {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${kitsApiKey}`
-      },
-      body: JSON.stringify(requestBody)
+      }
     });
 
-    if (!kitsResponse.ok) {
-      const errorText = await kitsResponse.text();
-      console.error(`Kits.ai API error: ${kitsResponse.status} - ${errorText}`);
+    if (!modelResponse.ok) {
+      const errorText = await modelResponse.text();
+      console.error(`Kits.ai API error: ${modelResponse.status} - ${errorText}`);
       
       await supabase
         .from('recordings')
         .update({
           status: 'failed',
-          error_message: `Kits.ai API error: ${kitsResponse.status} - ${errorText}`
+          error_message: `Kits.ai API error: ${modelResponse.status} - ${errorText}`
         })
         .eq('id', recordingId);
         
       return new Response(
-        JSON.stringify({ error: `Kits.ai API error: ${kitsResponse.status}` }),
+        JSON.stringify({ error: `Kits.ai API error: ${modelResponse.status}` }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
     // Process the response from Kits.ai
-    const kitsResponseData = await kitsResponse.json();
-    console.log('Received response from Kits.ai:', kitsResponseData);
+    const modelData = await modelResponse.json();
+    console.log('Successfully fetched model data from Kits.ai:', modelData);
 
-    if (!kitsResponseData.audio) {
+    // Now we have the model data, we need to send our audio for generation
+    const generateEndpoint = `https://arpeggi.io/api/kits/v1/generate`;
+    
+    // Prepare generate request body with model info
+    const generateRequestBody = {
+      model_id: modelId,
+      audio: `data:audio/wav;base64,${base64Data}`
+    };
+
+    console.log(`Sending audio to generation endpoint: ${generateEndpoint}`);
+
+    const generateResponse = await fetch(generateEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${kitsApiKey}`
+      },
+      body: JSON.stringify(generateRequestBody)
+    });
+
+    if (!generateResponse.ok) {
+      const errorText = await generateResponse.text();
+      console.error(`Kits.ai generation API error: ${generateResponse.status} - ${errorText}`);
+      
+      await supabase
+        .from('recordings')
+        .update({
+          status: 'failed',
+          error_message: `Kits.ai generation API error: ${generateResponse.status} - ${errorText}`
+        })
+        .eq('id', recordingId);
+        
+      return new Response(
+        JSON.stringify({ error: `Kits.ai generation API error: ${generateResponse.status}` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    const generatedData = await generateResponse.json();
+    console.log('Received generated audio from Kits.ai:', generatedData);
+
+    if (!generatedData.audio) {
       await supabase
         .from('recordings')
         .update({
@@ -175,7 +208,7 @@ serve(async (req) => {
     }
 
     // Extract the base64 audio data
-    const base64Audio = kitsResponseData.audio.split(',')[1];
+    const base64Audio = generatedData.audio.split(',')[1];
     const binaryStr = atob(base64Audio);
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) {
