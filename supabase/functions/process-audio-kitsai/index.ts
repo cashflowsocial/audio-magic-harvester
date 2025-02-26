@@ -22,6 +22,12 @@ serve(async (req) => {
       throw new Error('Recording ID is required');
     }
 
+    // Get Kits.ai API key from environment variables
+    const kitsApiKey = Deno.env.get('KITS.AI_API_KEY');
+    if (!kitsApiKey) {
+      throw new Error('Kits.ai API key is not configured.');
+    }
+
     // Create Supabase client with Deno Deploy environment variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
@@ -61,55 +67,108 @@ serve(async (req) => {
 
     console.log(`Starting Kits.ai ${extractionType} extraction for recording ${recordingId}`);
 
-    // Simulate API processing delay (in a real implementation, this would be an actual API call)
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // In a real implementation, this would be where you'd call the Kits.ai API
-    // For demonstration, we'll mock a processed file URL
-    const processedFilename = `kits-${extractionType}-${Date.now()}.wav`;
-    
-    // Upload the original file as a placeholder (in a real implementation, this would be the processed file)
-    const { error: uploadError } = await supabase
+    // Create a temporary file URL for the Kits.ai API
+    const tempFilename = `temp-${Date.now()}.wav`;
+    const { error: tempUploadError } = await supabase
       .storage
       .from('recordings')
-      .upload(processedFilename, fileData, {
+      .upload(tempFilename, fileData, {
         contentType: 'audio/wav'
       });
 
-    if (uploadError) throw uploadError;
+    if (tempUploadError) throw tempUploadError;
 
-    // Get the public URL for the processed file
-    const { data: publicUrlData } = await supabase
+    // Get the public URL for the temp file
+    const { data: tempUrlData } = await supabase
       .storage
       .from('recordings')
-      .getPublicUrl(processedFilename);
+      .getPublicUrl(tempFilename);
 
-    // Update the recording with the completed status and processed file URL
-    const { error: finalUpdateError } = await supabase
-      .from('recordings')
-      .update({
-        status: 'completed',
-        processed_audio_url: publicUrlData.publicUrl
-      })
-      .eq('id', recordingId);
+    const audioFileUrl = tempUrlData.publicUrl;
 
-    if (finalUpdateError) throw finalUpdateError;
+    // Prepare to call the Kits.ai API
+    try {
+      console.log(`Calling Kits.ai API for ${extractionType} extraction`);
+      
+      // In a real implementation, we would make an actual API call to Kits.ai
+      // This is a placeholder for demonstration purposes
+      // const response = await fetch('https://api.kits.ai/process', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //     'Authorization': `Bearer ${kitsApiKey}`
+      //   },
+      //   body: JSON.stringify({
+      //     url: audioFileUrl,
+      //     type: extractionType
+      //   })
+      // });
+      
+      // if (!response.ok) {
+      //   throw new Error(`Kits.ai API error: ${response.statusText}`);
+      // }
+      
+      // const result = await response.json();
+      // const processedAudioUrl = result.url;
 
-    console.log(`Completed Kits.ai ${extractionType} extraction for recording ${recordingId}`);
+      // For now, we'll simulate a successful API call
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // Simulate a processed file by using the original audio
+      const processedFilename = `kits-${extractionType}-${Date.now()}.wav`;
+      
+      // Upload the original file as a placeholder (in a real implementation, we would download the processed file from Kits.ai)
+      const { error: uploadError } = await supabase
+        .storage
+        .from('recordings')
+        .upload(processedFilename, fileData, {
+          contentType: 'audio/wav'
+        });
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Successfully processed ${type}`,
-        url: publicUrlData.publicUrl
-      }),
-      { 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json' 
-        } 
-      }
-    );
+      if (uploadError) throw uploadError;
+
+      // Get the public URL for the processed file
+      const { data: publicUrlData } = await supabase
+        .storage
+        .from('recordings')
+        .getPublicUrl(processedFilename);
+
+      // Clean up the temporary file
+      await supabase
+        .storage
+        .from('recordings')
+        .remove([tempFilename]);
+
+      // Update the recording with the completed status and processed file URL
+      const { error: finalUpdateError } = await supabase
+        .from('recordings')
+        .update({
+          status: 'completed',
+          processed_audio_url: publicUrlData.publicUrl
+        })
+        .eq('id', recordingId);
+
+      if (finalUpdateError) throw finalUpdateError;
+
+      console.log(`Completed Kits.ai ${extractionType} extraction for recording ${recordingId}`);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `Successfully processed ${type}`,
+          url: publicUrlData.publicUrl
+        }),
+        { 
+          headers: { 
+            ...corsHeaders,
+            'Content-Type': 'application/json' 
+          } 
+        }
+      );
+    } catch (apiError) {
+      console.error('Error calling Kits.ai API:', apiError);
+      throw new Error(`Failed to process audio with Kits.ai: ${apiError.message}`);
+    }
 
   } catch (error) {
     console.error('Error processing audio with Kits.ai:', error);
