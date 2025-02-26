@@ -114,7 +114,7 @@ serve(async (req) => {
     }
     const base64Data = btoa(binary);
 
-    // Use the fixed model ID for both drums and melody
+    // Use the fixed model ID (110784) as specified in the URL
     const modelId = '110784';
     console.log(`Using fixed model ID: ${modelId} for ${type}`);
 
@@ -125,11 +125,11 @@ serve(async (req) => {
       audio: `data:audio/wav;base64,${base64Data}`
     };
 
-    console.log(`Sending request to Arpeggi/Kits.ai voice model generation endpoint: ${generateEndpoint}`);
+    console.log(`Sending request to Kits.ai voice generation endpoint: ${generateEndpoint}`);
 
     // Send request to Kits.ai API for voice generation
     const kitsResponse = await fetch(generateEndpoint, {
-      method: 'POST',
+      method: 'POST',  // Use POST for generation
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${kitsApiKey}`
@@ -157,7 +157,7 @@ serve(async (req) => {
 
     // Process the response from Kits.ai
     const kitsResponseData = await kitsResponse.json();
-    console.log('Received response from Kits.ai');
+    console.log('Received response from Kits.ai:', kitsResponseData);
 
     if (!kitsResponseData.audio) {
       await supabase
