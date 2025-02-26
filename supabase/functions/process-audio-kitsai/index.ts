@@ -13,9 +13,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let recordingId: string | null = null;
+  
   try {
-    // Get the request body
-    const { recordingId, type } = await req.json();
+    // Get the request body and store recordingId in the outer scope
+    const body = await req.json();
+    recordingId = body.recordingId;
+    const type = body.type;
     
     if (!recordingId) {
       return new Response(
@@ -249,10 +253,9 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error processing audio with Kits.ai:', error);
     
-    // Try to update the recording status if recordingId is available
-    try {
-      const { recordingId } = await req.json();
-      if (recordingId) {
+    // Only try to update the recording if we have a recordingId from the outer scope
+    if (recordingId) {
+      try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
         const supabase = createClient(supabaseUrl, supabaseKey);
@@ -261,16 +264,16 @@ serve(async (req) => {
           .from('recordings')
           .update({
             status: 'failed',
-            error_message: `Error processing audio with Kits.ai: ${error.message || 'Unknown error'}`
+            error_message: `Error processing audio with Kits.ai: ${error instanceof Error ? error.message : 'Unknown error'}`
           })
           .eq('id', recordingId);
+      } catch (updateError) {
+        console.error('Error updating recording status after failure:', updateError);
       }
-    } catch (updateError) {
-      console.error('Error updating recording status after failure:', updateError);
     }
     
     return new Response(
-      JSON.stringify({ error: `Error processing audio with Kits.ai: ${error.message || 'Unknown error'}` }),
+      JSON.stringify({ error: `Error processing audio with Kits.ai: ${error instanceof Error ? error.message : 'Unknown error'}` }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
