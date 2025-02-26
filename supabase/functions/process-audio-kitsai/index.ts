@@ -111,29 +111,25 @@ serve(async (req) => {
     }
     const base64Data = btoa(binary);
 
-    // Determine endpoint and style based on type
-    let kitsEndpoint;
-    let requestBody = {
-      audio: `data:audio/wav;base64,${base64Data}`
-    };
+    // Determine model and endpoint based on type
+    let model;
+    const kitsEndpoint = 'https://api.kits.ai/api/v1/voice/generate';
 
     if (type === 'kits-drums') {
-      kitsEndpoint = 'https://api.kits.ai/api/v1/stems/drums';
-      // Add the "Gritty Tape Drums" style for drums
-      requestBody = {
-        ...requestBody,
-        style: "Gritty Tape Drums"
-      };
+      // Use Gritty Tape Drums voice model
+      model = "Gritty Tape Drums";
     } else { // kits-melody
-      kitsEndpoint = 'https://api.kits.ai/api/v1/stems/melody';
-      // Add the "Female Rock/Pop" style for melody
-      requestBody = {
-        ...requestBody,
-        style: "Female Rock/Pop"
-      };
+      // Use Female Rock/Pop voice model
+      model = "Female Rock/Pop";
     }
 
-    console.log(`Sending request to Kits.ai endpoint: ${kitsEndpoint} with style: ${requestBody.style}`);
+    // Prepare request body
+    const requestBody = {
+      audio: `data:audio/wav;base64,${base64Data}`,
+      model: model
+    };
+
+    console.log(`Sending request to Kits.ai voice model endpoint with model: ${model}`);
 
     // Send request to Kits.ai API
     const kitsResponse = await fetch(kitsEndpoint, {
