@@ -129,7 +129,7 @@ serve(async (req) => {
 
     // Send request to Kits.ai API for voice generation
     const kitsResponse = await fetch(generateEndpoint, {
-      method: 'POST',  // Use POST for generation
+      method: 'GET',  // Use GET for generation
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${kitsApiKey}`
