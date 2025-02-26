@@ -1,0 +1,5 @@
+
+project_id = "usnkfgchcyrobingibqi"
+
+[functions.process-audio-kitsai]
+verify_jwt = false

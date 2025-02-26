@@ -18,7 +18,7 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     recording
   } = useAudioProcessing(recordingId);
 
-  const renderExtractButton = (type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody') => {
+  const renderExtractButton = (type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody' | 'kits-drums' | 'kits-melody') => {
     const isProcessing = processingType === type || recording?.status === 'processing';
     const processingTime = getProcessingTime(type);
     const isComplete = recording?.status === 'completed' && recording.processing_type === type;
@@ -27,7 +27,9 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
       'drums': 'MusicGen Drums',
       'melody': 'MusicGen Melody',
       'hf-drums': 'HuggingFace Drums',
-      'hf-melody': 'HuggingFace Melody'
+      'hf-melody': 'HuggingFace Melody',
+      'kits-drums': 'Kits.ai Drums',
+      'kits-melody': 'Kits.ai Melody'
     }[type];
 
     return (
@@ -57,6 +59,11 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
         <h3 className="text-sm font-medium">HuggingFace Processing</h3>
         {renderExtractButton('hf-drums')}
         {renderExtractButton('hf-melody')}
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Kits.ai Processing</h3>
+        {renderExtractButton('kits-drums')}
+        {renderExtractButton('kits-melody')}
       </div>
     </div>
   );

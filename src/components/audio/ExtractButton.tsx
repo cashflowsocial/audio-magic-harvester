@@ -4,7 +4,7 @@ import { Drumstick, Music, Loader2, StopCircle } from "lucide-react";
 import { PlaybackControl } from "./PlaybackControl";
 
 interface ExtractButtonProps {
-  type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody';
+  type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody' | 'kits-drums' | 'kits-melody';
   displayName: string;
   disabled: boolean;
   isProcessing: boolean;

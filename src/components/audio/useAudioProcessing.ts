@@ -12,7 +12,7 @@ interface Recording {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   processed_audio_url?: string;
   error_message?: string;
-  processing_type?: 'drums' | 'melody' | 'hf-drums' | 'hf-melody';
+  processing_type?: 'drums' | 'melody' | 'hf-drums' | 'hf-melody' | 'kits-drums' | 'kits-melody';
   prompt?: string;
 }
 
@@ -84,7 +84,7 @@ export const useAudioProcessing = (recordingId: string | null) => {
     }
   };
 
-  const handleExtract = async (type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody') => {
+  const handleExtract = async (type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody' | 'kits-drums' | 'kits-melody') => {
     if (!recordingId) return;
 
     if (recording?.status === 'processing') {
@@ -100,7 +100,13 @@ export const useAudioProcessing = (recordingId: string | null) => {
     });
 
     try {
-      const endpoint = type.startsWith('hf') ? 'process-audio-huggingface' : 'process-audio-musicgen';
+      let endpoint = 'process-audio-musicgen';
+      
+      if (type.startsWith('hf')) {
+        endpoint = 'process-audio-huggingface';
+      } else if (type.startsWith('kits')) {
+        endpoint = 'process-audio-kitsai';
+      }
       
       // Make the request with proper error handling
       const { data, error } = await supabase.functions.invoke(endpoint, {
