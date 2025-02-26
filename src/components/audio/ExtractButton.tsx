@@ -32,6 +32,16 @@ export const ExtractButton = ({
     <Drumstick className="h-4 w-4" /> : 
     <Music className="h-4 w-4" />;
 
+  // Add style information for Kits.ai buttons
+  const getStyleInfo = () => {
+    if (type === 'kits-drums') return '(Gritty Tape Drums)';
+    if (type === 'kits-melody') return '(Female Rock/Pop)';
+    return '';
+  };
+
+  const styleInfo = getStyleInfo();
+  const buttonText = styleInfo ? `${displayName} ${styleInfo}` : displayName;
+
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
@@ -42,7 +52,7 @@ export const ExtractButton = ({
           variant="outline"
         >
           {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
-          {isProcessing ? `Processing ${displayName}... ${processingTime}` : displayName}
+          {isProcessing ? `Processing ${displayName}... ${processingTime}` : buttonText}
         </Button>
         {isProcessing && (
           <Button

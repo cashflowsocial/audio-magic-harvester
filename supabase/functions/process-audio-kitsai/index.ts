@@ -107,12 +107,29 @@ serve(async (req) => {
     }
     const base64Data = btoa(binary);
 
-    // Determine endpoint based on type
-    const kitsEndpoint = type === 'kits-drums' 
-      ? 'https://api.kits.ai/api/v1/stems/drums' 
-      : 'https://api.kits.ai/api/v1/stems/melody';
+    // Determine endpoint and style based on type
+    let kitsEndpoint;
+    let requestBody = {
+      audio: `data:audio/wav;base64,${base64Data}`
+    };
 
-    console.log(`Sending request to Kits.ai endpoint: ${kitsEndpoint}`);
+    if (type === 'kits-drums') {
+      kitsEndpoint = 'https://api.kits.ai/api/v1/stems/drums';
+      // Add the "Gritty Tape Drums" style for drums
+      requestBody = {
+        ...requestBody,
+        style: "Gritty Tape Drums"
+      };
+    } else { // kits-melody
+      kitsEndpoint = 'https://api.kits.ai/api/v1/stems/melody';
+      // Add the "Female Rock/Pop" style for melody
+      requestBody = {
+        ...requestBody,
+        style: "Female Rock/Pop"
+      };
+    }
+
+    console.log(`Sending request to Kits.ai endpoint: ${kitsEndpoint} with style: ${requestBody.style}`);
 
     // Send request to Kits.ai API
     const kitsResponse = await fetch(kitsEndpoint, {
@@ -121,9 +138,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${kitsApiKey}`
       },
-      body: JSON.stringify({
-        audio: `data:audio/wav;base64,${base64Data}`
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!kitsResponse.ok) {
@@ -179,7 +194,7 @@ serve(async (req) => {
       .from('recordings')
       .upload(processedFilename, bytes.buffer, {
         contentType: 'audio/wav',
-        upsert: false
+        upsert: true
       });
 
     if (uploadError) {
