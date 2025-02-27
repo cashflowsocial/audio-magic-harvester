@@ -92,10 +92,10 @@ serve(async (req) => {
     console.log(`Successfully downloaded recording ${recording.filename}`);
     
     // Define voice model IDs based on type
-    // These should be replaced with actual Kits.ai voice model IDs
+    // Using the correct Kits.ai voice model IDs provided by the user
     const voiceModelId = type === 'kits-drums' 
-      ? '204850' // Drum kit ID (replace with actual ID for drums)
-      : '204849'; // Melody voice ID (replace with actual ID for melody)
+      ? '1118122' // Drum kit ID provided by user
+      : '221129';  // Melody voice ID provided by user
     
     // Create a FormData object for the API request
     const formData = new FormData();
