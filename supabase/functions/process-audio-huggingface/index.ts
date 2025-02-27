@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -8,351 +7,114 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
-  let recordingId: string | null = null;
-  
+  let recordingId = null;
+
   try {
-    // Get the request body
     const { recordingId: reqRecordingId, type } = await req.json();
     recordingId = reqRecordingId;
     
     if (!recordingId) {
-      return new Response(
-        JSON.stringify({ error: 'Recording ID is required' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return new Response(JSON.stringify({ error: 'Recording ID is required' }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 
+      });
     }
 
     console.log(`Processing recording ${recordingId} with HuggingFace for ${type}`);
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const huggingFaceApiKey = Deno.env.get('HUGGING_FACE_API_KEY') ?? '';
-    
+
     if (!huggingFaceApiKey) {
-      return new Response(
-        JSON.stringify({ error: 'HuggingFace API key is not configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
+      return new Response(JSON.stringify({ error: 'HuggingFace API key is missing' }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 
+      });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Update the recording status to processing
-    const { error: updateError } = await supabase
-      .from('recordings')
-      .update({
-        status: 'processing',
-        processing_type: type
-      })
-      .eq('id', recordingId);
+    await supabase.from('recordings').update({ status: 'processing', processing_type: type }).eq('id', recordingId);
 
-    if (updateError) {
-      console.error('Error updating recording status:', updateError);
-      return new Response(
-        JSON.stringify({ error: `Error updating recording status: ${updateError.message}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
+    const { data: recording } = await supabase.from('recordings').select('*').eq('id', recordingId).single();
+
+    if (!recording) {
+      return new Response(JSON.stringify({ error: 'Recording not found' }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 
+      });
     }
 
-    // Get the recording details
-    const { data: recording, error: fetchError } = await supabase
-      .from('recordings')
-      .select('*')
-      .eq('id', recordingId)
-      .single();
+    const { data: fileData } = await supabase.storage.from('recordings').download(recording.filename);
 
-    if (fetchError || !recording) {
-      console.error('Error fetching recording:', fetchError);
-      return new Response(
-        JSON.stringify({ error: 'Recording not found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-      );
-    }
-
-    // Get the audio file from storage
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from('recordings')
-      .download(recording.filename);
-
-    if (fileError || !fileData) {
-      console.error('Error downloading audio file:', fileError);
-      await supabase
-        .from('recordings')
-        .update({
-          status: 'failed',
-          error_message: `Error downloading audio file: ${fileError?.message || 'Unknown error'}`
-        })
-        .eq('id', recordingId);
-
-      return new Response(
-        JSON.stringify({ error: 'Error downloading audio file' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
-
-    console.log(`Successfully downloaded recording ${recording.filename}`);
-
-    // Convert audio to base64
     const arrayBuffer = await fileData.arrayBuffer();
-    const base64Audio = btoa(
-      new Uint8Array(arrayBuffer)
-        .reduce((data, byte) => data + String.fromCharCode(byte), '')
-    );
+    const audioBlob = new Blob([arrayBuffer], { type: 'audio/wav' });
 
-    // Select the appropriate model and approach based on type
-    if (type === 'hf-drums') {
-      // For DrumKitRVCModels, we need to use automatic-speech-recognition as the task
-      console.log("Using DrumKitRVCModels for drum conversion");
-      
-      // Send the audio file directly as binary for this specific model
-      const fetchOptions = {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${huggingFaceApiKey}`,
-          'Content-Type': 'audio/wav'  // Send as binary audio
-        },
-        body: fileData  // Send the raw audio file
-      };
-      
-      console.log("Sending binary audio data to HuggingFace model");
-      
-      // Direct request to the model
-      const response = await fetch(
-        `https://api-inference.huggingface.co/models/RegalHyperus/DrumKitRVCModels`,
-        fetchOptions
-      );
-      
-      if (!response.ok) {
-        const errorMsg = await response.text();
-        console.error(`HuggingFace API error: ${response.status} - ${errorMsg}`);
-        
-        await supabase
-          .from('recordings')
-          .update({
-            status: 'failed',
-            error_message: `HuggingFace API error: ${response.status} - ${errorMsg}`
-          })
-          .eq('id', recordingId);
-          
-        return new Response(
-          JSON.stringify({ 
-            error: `HuggingFace API error: ${response.status}`,
-            details: errorMsg 
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
-      
-      // Get the processed audio from the response
-      const processedAudio = await response.arrayBuffer();
-      console.log('Received processed drum audio, size:', processedAudio.byteLength);
-      
-      // Create processed filename
-      const processedFilename = `processed-${type}-${recording.filename}`;
-      
-      // Upload the processed audio to storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('recordings')
-        .upload(processedFilename, processedAudio, {
-          contentType: 'audio/wav',
-          upsert: true
-        });
+    let model = type === 'hf-drums' ? "RegalHyperus/DrumKitRVCModels" : "facebook/musicgen-small";
 
-      if (uploadError) {
-        console.error('Error uploading processed audio:', uploadError);
-        
-        await supabase
-          .from('recordings')
-          .update({
-            status: 'failed',
-            error_message: `Error uploading processed audio: ${uploadError.message}`
-          })
-          .eq('id', recordingId);
-          
-        return new Response(
-          JSON.stringify({ error: 'Error uploading processed audio' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
+    console.log(`Using HuggingFace model: ${model}`);
 
-      // Get the URL of the processed audio
-      const { data: urlData } = await supabase.storage
-        .from('recordings')
-        .getPublicUrl(processedFilename);
+    let apiUrl = `https://api-inference.huggingface.co/models/${model}`;
 
-      // Update the recording with the processed audio URL
-      const { error: finalUpdateError } = await supabase
-        .from('recordings')
-        .update({
-          status: 'completed',
-          processed_audio_url: urlData.publicUrl
-        })
-        .eq('id', recordingId);
+    const hfResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${huggingFaceApiKey}`,
+        'Content-Type': 'application/octet-stream'
+      },
+      body: arrayBuffer
+    });
 
-      if (finalUpdateError) {
-        console.error('Error updating recording with processed audio URL:', finalUpdateError);
-        return new Response(
-          JSON.stringify({ error: 'Error updating recording with processed audio URL' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
+    if (!hfResponse.ok) {
+      const errorText = await hfResponse.text();
+      console.error(`HuggingFace API error: ${hfResponse.status} - ${errorText}`);
 
-      console.log(`Successfully processed drums for recording ${recordingId}`);
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Drum recording processed successfully',
-          url: urlData.publicUrl
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-      
-    } else if (type === 'hf-melody') {
-      // Melody generation with MusicGen
-      console.log("Using MusicGen for melody generation");
-      
-      const requestBody = {
-        inputs: {
-          audio: `data:audio/wav;base64,${base64Audio}`,
-          prompt: "Convert this to a melodic line"
-        }
-      };
-      
-      const response = await fetch(
-        `https://api-inference.huggingface.co/models/facebook/musicgen-small`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${huggingFaceApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestBody)
-        }
-      );
-      
-      if (!response.ok) {
-        const errorMsg = await response.text();
-        console.error(`HuggingFace API error: ${response.status} - ${errorMsg}`);
-        
-        await supabase
-          .from('recordings')
-          .update({
-            status: 'failed',
-            error_message: `HuggingFace API error: ${response.status} - ${errorMsg}`
-          })
-          .eq('id', recordingId);
-          
-        return new Response(
-          JSON.stringify({ 
-            error: `HuggingFace API error: ${response.status}`,
-            details: errorMsg 
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
-      
-      // Get the processed audio from the response
-      const processedAudio = await response.arrayBuffer();
-      console.log('Received processed melody audio, size:', processedAudio.byteLength);
-      
-      // Create processed filename
-      const processedFilename = `processed-${type}-${recording.filename}`;
-      
-      // Upload the processed audio to storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('recordings')
-        .upload(processedFilename, processedAudio, {
-          contentType: 'audio/wav',
-          upsert: true
-        });
+      await supabase.from('recordings').update({ 
+        status: 'failed', 
+        error_message: `HuggingFace API error: ${hfResponse.status} - ${errorText}` 
+      }).eq('id', recordingId);
 
-      if (uploadError) {
-        console.error('Error uploading processed audio:', uploadError);
-        
-        await supabase
-          .from('recordings')
-          .update({
-            status: 'failed',
-            error_message: `Error uploading processed audio: ${uploadError.message}`
-          })
-          .eq('id', recordingId);
-          
-        return new Response(
-          JSON.stringify({ error: 'Error uploading processed audio' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
-
-      // Get the URL of the processed audio
-      const { data: urlData } = await supabase.storage
-        .from('recordings')
-        .getPublicUrl(processedFilename);
-
-      // Update the recording with the processed audio URL
-      const { error: finalUpdateError } = await supabase
-        .from('recordings')
-        .update({
-          status: 'completed',
-          processed_audio_url: urlData.publicUrl
-        })
-        .eq('id', recordingId);
-
-      if (finalUpdateError) {
-        console.error('Error updating recording with processed audio URL:', finalUpdateError);
-        return new Response(
-          JSON.stringify({ error: 'Error updating recording with processed audio URL' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
-
-      console.log(`Successfully processed melody for recording ${recordingId}`);
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Melody recording processed successfully',
-          url: urlData.publicUrl
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    } else {
-      return new Response(
-        JSON.stringify({ error: `Invalid processing type: ${type}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      return new Response(JSON.stringify({ error: `HuggingFace API error: ${hfResponse.status}` }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 
+      });
     }
+
+    const responseBuffer = await hfResponse.arrayBuffer();
+    const processedFilename = `processed-${type}-${recording.filename}`;
+    const processedAudioBlob = new Blob([responseBuffer], { type: 'audio/wav' });
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('recordings')
+      .upload(processedFilename, processedAudioBlob, { upsert: true });
+
+    if (uploadError) {
+      console.error('Error uploading processed audio:', uploadError);
+      
+      await supabase.from('recordings').update({ 
+        status: 'failed', 
+        error_message: `Error uploading processed audio: ${uploadError.message}` 
+      }).eq('id', recordingId);
+        
+      return new Response(JSON.stringify({ error: 'Error uploading processed audio' }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 
+      });
+    }
+
+    const { data: urlData } = await supabase.storage.from('recordings').getPublicUrl(processedFilename);
+
+    await supabase.from('recordings').update({ 
+      status: 'completed', 
+      processed_audio_url: urlData.publicUrl 
+    }).eq('id', recordingId);
+
+    return new Response(JSON.stringify({ success: true, message: 'Recording processed successfully', url: urlData.publicUrl }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 
+    });
+
   } catch (error) {
     console.error('Error processing audio with HuggingFace:', error);
-    
-    // Only try to update the recording if we have a recordingId from the outer scope
-    if (recordingId) {
-      try {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        
-        await supabase
-          .from('recordings')
-          .update({
-            status: 'failed',
-            error_message: `Error processing audio with HuggingFace: ${error instanceof Error ? error.message : 'Unknown error'}`
-          })
-          .eq('id', recordingId);
-      } catch (updateError) {
-        console.error('Error updating recording status after failure:', updateError);
-      }
-    }
-    
-    return new Response(
-      JSON.stringify({ error: `Error processing audio with HuggingFace: ${error instanceof Error ? error.message : 'Unknown error'}` }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    );
+    return new Response(JSON.stringify({ error: `Internal Server Error: ${error.message}` }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 
+    });
   }
 });
