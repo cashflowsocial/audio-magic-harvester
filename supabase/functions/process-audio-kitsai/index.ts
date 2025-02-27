@@ -101,8 +101,17 @@ serve(async (req) => {
 
     console.log(`Successfully downloaded recording ${recording.filename}, size: ${fileData.size} bytes`);
     
-    // Check if the file is a WAV file, or convert it if necessary
+    // Process the filename to ensure it has .wav extension
     const originalFilename = recording.filename;
+    const pathParts = originalFilename.split('/');
+    const baseName = pathParts[pathParts.length - 1].split('.')[0];
+    const wavFilename = `${baseName}.wav`;
+    
+    console.log(`Original filename: ${originalFilename}`);
+    console.log(`Extracted base name: ${baseName}`);
+    console.log(`Using WAV filename: ${wavFilename}`);
+    
+    // Check if the file is a WAV file
     if (!originalFilename.toLowerCase().endsWith('.wav')) {
       console.log(`Warning: File ${originalFilename} is not a .wav file. Kits.ai requires .wav format.`);
       
@@ -134,10 +143,10 @@ serve(async (req) => {
     
     // Convert the file data to a Blob with explicit WAV MIME type
     const audioBlob = new Blob([fileData], { type: 'audio/wav' });
-    formData.append('soundFile', audioBlob, originalFilename);
+    formData.append('soundFile', audioBlob, wavFilename);
     
     console.log(`Created form data with audio blob (${audioBlob.size} bytes) and voice model ID: ${voiceModelId}`);
-    console.log(`Using filename: ${originalFilename} with MIME type: audio/wav`);
+    console.log(`Using filename: ${wavFilename} with MIME type: audio/wav`);
     
     // Call the Kits.ai API to start the conversion
     console.log(`Calling Kits.ai API for ${type} conversion with model ID: ${voiceModelId}`);
