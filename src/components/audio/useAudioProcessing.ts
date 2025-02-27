@@ -21,6 +21,7 @@ export const useAudioProcessing = (recordingId: string | null) => {
   const [playingType, setPlayingType] = useState<string | null>(null);
   const [processingType, setProcessingType] = useState<string | null>(null);
   const [startTimes, setStartTimes] = useState<Record<string, number>>({});
+  const [prompt, setPrompt] = useState<string>("Create a cool drum pattern");
 
   const { data: recording, refetch } = useQuery({
     queryKey: ['recording', recordingId],
@@ -110,7 +111,7 @@ export const useAudioProcessing = (recordingId: string | null) => {
       
       // Make the request with proper error handling
       const { data, error } = await supabase.functions.invoke(endpoint, {
-        body: { recordingId, type }
+        body: { recordingId, type, prompt: type.includes('drums') ? prompt : undefined }
       });
 
       if (error) {
@@ -153,6 +154,8 @@ export const useAudioProcessing = (recordingId: string | null) => {
       const startTime = startTimes[type];
       if (!startTime) return '';
       return `${Math.floor((Date.now() - startTime) / 1000)}s`;
-    }
+    },
+    prompt,
+    setPrompt
   };
 };
