@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -112,11 +111,18 @@ serve(async (req) => {
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     
-    // Convert the file data to a Blob
+    // Ensure the file has a .wav extension
+    const originalFilename = recording.filename;
+    const wavFilename = originalFilename.endsWith('.wav') 
+      ? originalFilename 
+      : `${originalFilename.split('.')[0]}.wav`;
+    
+    // Convert the file data to a Blob with WAV MIME type
     const audioBlob = new Blob([fileData], { type: 'audio/wav' });
-    formData.append('soundFile', audioBlob, recording.filename);
+    formData.append('soundFile', audioBlob, wavFilename);
     
     console.log(`Created form data with audio blob (${audioBlob.size} bytes) and voice model ID: ${voiceModelId}`);
+    console.log(`Using filename: ${wavFilename} with MIME type: audio/wav`);
     
     // Call the Kits.ai API to start the conversion
     console.log(`Calling Kits.ai API for ${type} conversion with model ID: ${voiceModelId}`);
@@ -254,11 +260,11 @@ serve(async (req) => {
       throw new Error(`Error processing audio response: ${bufferError instanceof Error ? bufferError.message : 'Unknown error'}`);
     }
     
-    // Create processed filename
+    // Create processed filename with .wav extension
     const processedFilename = `${type}-${Date.now()}.wav`;
     console.log(`Using processed filename: ${processedFilename}`);
     
-    // Upload the processed audio to Supabase storage
+    // Upload the processed audio to Supabase storage with WAV content type
     let uploadResult;
     try {
       uploadResult = await supabase.storage
