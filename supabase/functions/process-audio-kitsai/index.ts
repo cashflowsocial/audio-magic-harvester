@@ -33,9 +33,7 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    
-    // Check for the API key with the correct format (with dot instead of underscore)
-    const kitsApiKey = Deno.env.get('KITS.AI_API_KEY') ?? '';
+    const kitsApiKey = Deno.env.get('KITS_API_KEY') ?? '';
     
     if (!kitsApiKey) {
       console.error("Kits.ai API key is not configured");
