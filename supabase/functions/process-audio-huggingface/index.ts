@@ -17,7 +17,7 @@ serve(async (req) => {
   
   try {
     // Get the request body
-    const { recordingId: reqRecordingId, type } = await req.json();
+    const { recordingId: reqRecordingId, type, prompt } = await req.json();
     recordingId = reqRecordingId;
     
     if (!recordingId) {
@@ -48,7 +48,8 @@ serve(async (req) => {
       .from('recordings')
       .update({
         status: 'processing',
-        processing_type: type
+        processing_type: type,
+        prompt: prompt || undefined
       })
       .eq('id', recordingId);
 
@@ -90,111 +91,79 @@ serve(async (req) => {
 
     console.log(`Successfully downloaded recording ${recording.filename}`);
 
-    // Convert audio to base64
-    const arrayBuffer = await fileData.arrayBuffer();
-    const base64Audio = btoa(
-      new Uint8Array(arrayBuffer)
-        .reduce((data, byte) => data + String.fromCharCode(byte), '')
-    );
+    let responseData;
     
-    let apiUrl = "";
-    let requestBody = {};
-    
+    // Process the audio based on the type
     if (type === 'hf-drums') {
-      // For drum processing, use the Mistral-Small-Drummer-22B model
-      apiUrl = "https://api-inference.huggingface.co/models/nbeerbower/Mistral-Small-Drummer-22B";
+      // For Hugging Face Drums - Using AudioLDM2
+      const audioBlob = new Blob([fileData], { type: 'audio/wav' });
+      const formData = new FormData();
+      formData.append('file', audioBlob, 'audio.wav');
+      formData.append('text', prompt || 'Convert this to drum beats'); 
       
-      // The prompt for the drum model
-      const drumPrompt = "Convert this audio to a drum pattern:";
+      const apiUrl = "https://api-inference.huggingface.co/models/cvssp/audioldm-m-full";
+      console.log("Using AudioLDM2 for drum generation with prompt:", prompt || 'Convert this to drum beats');
       
-      requestBody = {
-        inputs: `${drumPrompt}\n\n<audio>${base64Audio}</audio>`,
-        parameters: {
-          max_new_tokens: 512,
-          temperature: 0.7,
-          top_p: 0.95,
-          return_full_text: false
-        }
-      };
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${huggingFaceApiKey}`
+          // Note: Don't set Content-Type when using FormData
+        },
+        body: formData
+      });
       
-      console.log("Using Mistral-Small-Drummer-22B model for drum generation");
-    } else {
-      // For melody, we'll use the MusicGen model
-      apiUrl = "https://api-inference.huggingface.co/models/facebook/musicgen-small";
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Hugging Face API error: ${response.status} - ${errorText}`);
+      }
       
-      requestBody = {
-        inputs: {
-          audio: `data:audio/wav;base64,${base64Audio}`,
-          prompt: "Convert this to a melodic line"
-        }
-      };
+      responseData = await response.arrayBuffer();
+      console.log("Received drum audio response, size:", responseData.byteLength);
       
-      console.log("Using MusicGen for melody generation");
-    }
-    
-    console.log(`Sending request to ${apiUrl}`);
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${huggingFaceApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    });
-    
-    if (!response.ok) {
-      const errorMsg = await response.text();
-      console.error(`HuggingFace API error: ${response.status} - ${errorMsg}`);
-      
-      await supabase
-        .from('recordings')
-        .update({
-          status: 'failed',
-          error_message: `HuggingFace API error: ${response.status} - ${errorMsg}`
-        })
-        .eq('id', recordingId);
-        
-      return new Response(
-        JSON.stringify({ 
-          error: `HuggingFace API error: ${response.status}`,
-          details: errorMsg 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    } else if (type === 'hf-melody') {
+      // For Hugging Face Melody - Using MusicGen
+      const arrayBuffer = await fileData.arrayBuffer();
+      const base64Audio = btoa(
+        new Uint8Array(arrayBuffer)
+          .reduce((data, byte) => data + String.fromCharCode(byte), '')
       );
-    }
-    
-    // Handle the response based on the model type
-    let processedAudio;
-    
-    if (type === 'hf-drums') {
-      // For Mistral-Small-Drummer-22B, we get a text response with drum patterns
-      const textResponse = await response.json();
-      console.log("Received response from Mistral model:", JSON.stringify(textResponse).substring(0, 200) + "...");
       
-      // We need to convert the drum pattern text to audio
-      // For now, we'll use a placeholder approach by generating a simple drum audio
-      // In a real implementation, you would use the pattern to generate actual drum sounds
+      const apiUrl = "https://api-inference.huggingface.co/models/facebook/musicgen-small";
+      console.log("Using MusicGen for melody generation");
       
-      // Create a placeholder drum audio or use a predefined drum loop
-      const placeholderUrl = "https://assets.mixkit.co/sfx/preview/mixkit-tribal-dry-drum-558.mp3";
-      const placeholderResponse = await fetch(placeholderUrl);
-      processedAudio = await placeholderResponse.arrayBuffer();
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${huggingFaceApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          inputs: {
+            audio_file: `data:audio/wav;base64,${base64Audio}`,
+            text: prompt || "Extract and enhance the melody from this audio"
+          }
+        })
+      });
       
-      console.log("Generated placeholder drum audio from pattern");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Hugging Face API error: ${response.status} - ${errorText}`);
+      }
+      
+      responseData = await response.arrayBuffer();
+      console.log("Received melody audio response, size:", responseData.byteLength);
     } else {
-      // For MusicGen, get the audio directly from the response
-      processedAudio = await response.arrayBuffer();
-      console.log("Received processed melody audio, size:", processedAudio.byteLength);
+      throw new Error(`Unsupported processing type: ${type}`);
     }
     
     // Create processed filename
-    const processedFilename = `processed-${type}-${recording.filename}`;
+    const processedFilename = `processed-${type}-${Date.now()}-${recording.filename}`;
     
     // Upload the processed audio to storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('recordings')
-      .upload(processedFilename, processedAudio, {
+      .upload(processedFilename, responseData, {
         contentType: 'audio/wav',
         upsert: true
       });
