@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -100,6 +101,26 @@ serve(async (req) => {
 
     console.log(`Successfully downloaded recording ${recording.filename}, size: ${fileData.size} bytes`);
     
+    // Check if the file is a WAV file, or convert it if necessary
+    const originalFilename = recording.filename;
+    if (!originalFilename.toLowerCase().endsWith('.wav')) {
+      console.log(`Warning: File ${originalFilename} is not a .wav file. Kits.ai requires .wav format.`);
+      
+      // Update recording with error
+      await supabase
+        .from('recordings')
+        .update({
+          status: 'failed',
+          error_message: `Kits.ai API requires .wav files, but file is in ${originalFilename.split('.').pop()} format.`
+        })
+        .eq('id', recordingId);
+        
+      return new Response(
+        JSON.stringify({ error: 'Kits.ai requires .wav files' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+    
     // Define voice model IDs based on type
     const voiceModelId = type === 'kits-drums' 
       ? '1118122' // Drum kit ID provided by user
@@ -111,18 +132,12 @@ serve(async (req) => {
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     
-    // Ensure the file has a .wav extension
-    const originalFilename = recording.filename;
-    const wavFilename = originalFilename.endsWith('.wav') 
-      ? originalFilename 
-      : `${originalFilename.split('.')[0]}.wav`;
-    
-    // Convert the file data to a Blob with WAV MIME type
+    // Convert the file data to a Blob with explicit WAV MIME type
     const audioBlob = new Blob([fileData], { type: 'audio/wav' });
-    formData.append('soundFile', audioBlob, wavFilename);
+    formData.append('soundFile', audioBlob, originalFilename);
     
     console.log(`Created form data with audio blob (${audioBlob.size} bytes) and voice model ID: ${voiceModelId}`);
-    console.log(`Using filename: ${wavFilename} with MIME type: audio/wav`);
+    console.log(`Using filename: ${originalFilename} with MIME type: audio/wav`);
     
     // Call the Kits.ai API to start the conversion
     console.log(`Calling Kits.ai API for ${type} conversion with model ID: ${voiceModelId}`);
@@ -260,7 +275,7 @@ serve(async (req) => {
       throw new Error(`Error processing audio response: ${bufferError instanceof Error ? bufferError.message : 'Unknown error'}`);
     }
     
-    // Create processed filename with .wav extension
+    // Create processed filename with explicit .wav extension
     const processedFilename = `${type}-${Date.now()}.wav`;
     console.log(`Using processed filename: ${processedFilename}`);
     
