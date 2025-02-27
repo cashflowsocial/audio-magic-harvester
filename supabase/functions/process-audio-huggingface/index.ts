@@ -119,23 +119,28 @@ serve(async (req) => {
     console.log(`Using HuggingFace model: ${model}`);
 
     // Prepare the API request based on model type
-    let apiUrl = "";
+    let apiUrl = `https://api-inference.huggingface.co/models/${model}`;
     let requestBody = {};
+    let headers = {
+      'Authorization': `Bearer ${huggingFaceApiKey}`,
+      'Content-Type': 'application/json'
+    };
     
     if (type === 'hf-drums') {
-      // Endpoint for RVC voice conversion
-      apiUrl = `https://api-inference.huggingface.co/models/${model}`;
+      // For the DrumKitRVCModels, we need to send raw audio data
+      // Since this is a voice conversion model, we don't specify a task
       requestBody = {
-        inputs: {
-          audio: `data:audio/wav;base64,${base64Audio}`,
-        },
-        options: {
-          wait_for_model: true
+        inputs: `data:audio/wav;base64,${base64Audio}`,
+        parameters: {
+          voice_pitch_scale: 0,
+          f0_method: "crepe",
+          index_rate: 0.5,
+          protect: 0.33,
+          filter_radius: 3
         }
       };
-    } else {
+    } else if (type === 'hf-melody') {
       // Melody generation with MusicGen
-      apiUrl = `https://api-inference.huggingface.co/models/${model}`;
       requestBody = {
         inputs: {
           audio: `data:audio/wav;base64,${base64Audio}`,
@@ -145,14 +150,12 @@ serve(async (req) => {
     }
 
     console.log(`Sending request to HuggingFace API: ${apiUrl}`);
+    console.log(`Request parameters:`, JSON.stringify(requestBody).substring(0, 200) + '...');
 
     // Send request to HuggingFace API
     const hfResponse = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${huggingFaceApiKey}`,
-        'Content-Type': 'application/json'
-      },
+      headers: headers,
       body: JSON.stringify(requestBody)
     });
 
