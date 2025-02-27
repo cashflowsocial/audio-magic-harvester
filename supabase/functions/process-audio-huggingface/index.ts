@@ -1,7 +1,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { HfInference } from "https://esm.sh/@huggingface/inference@2.6.4";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,101 +8,261 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let recordingId: string | null = null;
+  
   try {
-    const { recordingId, type } = await req.json();
-    console.log('Processing with HuggingFace:', { recordingId, type });
-
-    const HUGGING_FACE_API_KEY = Deno.env.get('HUGGING_FACE_API_KEY');
-    if (!HUGGING_FACE_API_KEY) {
-      throw new Error('HUGGING_FACE_API_KEY is not set');
+    // Get the request body
+    const { recordingId: reqRecordingId, type } = await req.json();
+    recordingId = reqRecordingId;
+    
+    if (!recordingId) {
+      return new Response(
+        JSON.stringify({ error: 'Recording ID is required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
     }
 
-    // Initialize Supabase client
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    console.log(`Processing recording ${recordingId} with HuggingFace for ${type}`);
 
-    // Get the recording
-    const { data: recording, error: recordingError } = await supabase
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const huggingFaceApiKey = Deno.env.get('HUGGING_FACE_API_KEY') ?? '';
+    
+    if (!huggingFaceApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'HuggingFace API key is not configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Update the recording status to processing
+    const { error: updateError } = await supabase
+      .from('recordings')
+      .update({
+        status: 'processing',
+        processing_type: type
+      })
+      .eq('id', recordingId);
+
+    if (updateError) {
+      console.error('Error updating recording status:', updateError);
+      return new Response(
+        JSON.stringify({ error: `Error updating recording status: ${updateError.message}` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    // Get the recording details
+    const { data: recording, error: fetchError } = await supabase
       .from('recordings')
       .select('*')
       .eq('id', recordingId)
       .single();
 
-    if (recordingError || !recording) {
-      throw new Error('Recording not found');
+    if (fetchError || !recording) {
+      console.error('Error fetching recording:', fetchError);
+      return new Response(
+        JSON.stringify({ error: 'Recording not found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      );
     }
 
-    // Update status to processing
-    await supabase
+    // Get the audio file from storage
+    const { data: fileData, error: fileError } = await supabase.storage
       .from('recordings')
-      .update({ 
-        status: 'processing',
-        processing_type: type 
-      })
-      .eq('id', recordingId);
+      .download(recording.filename);
 
-    // Get the public URL for the recording
-    const { data: { publicUrl } } = await supabase.storage
+    if (fileError || !fileData) {
+      console.error('Error downloading audio file:', fileError);
+      await supabase
+        .from('recordings')
+        .update({
+          status: 'failed',
+          error_message: `Error downloading audio file: ${fileError?.message || 'Unknown error'}`
+        })
+        .eq('id', recordingId);
+
+      return new Response(
+        JSON.stringify({ error: 'Error downloading audio file' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    console.log(`Successfully downloaded recording ${recording.filename}`);
+
+    // Convert audio to base64
+    const arrayBuffer = await fileData.arrayBuffer();
+    const base64Audio = btoa(
+      new Uint8Array(arrayBuffer)
+        .reduce((data, byte) => data + String.fromCharCode(byte), '')
+    );
+
+    // Select the appropriate model based on type
+    let model = "";
+    
+    if (type === 'hf-drums') {
+      // Using the DrumKitRVCModels for drums
+      model = "RegalHyperus/DrumKitRVCModels";
+    } else {
+      // Default melody model
+      model = "facebook/musicgen-small";
+    }
+    
+    console.log(`Using HuggingFace model: ${model}`);
+
+    // Prepare the API request based on model type
+    let apiUrl = "";
+    let requestBody = {};
+    
+    if (type === 'hf-drums') {
+      // Endpoint for RVC voice conversion
+      apiUrl = `https://api-inference.huggingface.co/models/${model}`;
+      requestBody = {
+        inputs: {
+          audio: `data:audio/wav;base64,${base64Audio}`,
+        },
+        options: {
+          wait_for_model: true
+        }
+      };
+    } else {
+      // Melody generation with MusicGen
+      apiUrl = `https://api-inference.huggingface.co/models/${model}`;
+      requestBody = {
+        inputs: {
+          audio: `data:audio/wav;base64,${base64Audio}`,
+          prompt: "Convert this to a melodic line"
+        }
+      };
+    }
+
+    console.log(`Sending request to HuggingFace API: ${apiUrl}`);
+
+    // Send request to HuggingFace API
+    const hfResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${huggingFaceApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!hfResponse.ok) {
+      const errorText = await hfResponse.text();
+      console.error(`HuggingFace API error: ${hfResponse.status} - ${errorText}`);
+      
+      await supabase
+        .from('recordings')
+        .update({
+          status: 'failed',
+          error_message: `HuggingFace API error: ${hfResponse.status} - ${errorText}`
+        })
+        .eq('id', recordingId);
+        
+      return new Response(
+        JSON.stringify({ error: `HuggingFace API error: ${hfResponse.status}` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    // Get the response data from HuggingFace
+    const responseBuffer = await hfResponse.arrayBuffer();
+    console.log('Received response from HuggingFace, size:', responseBuffer.byteLength);
+
+    // Create processed filename
+    const processedFilename = `processed-${type}-${recording.filename}`;
+    
+    // Upload the processed audio to storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('recordings')
-      .getPublicUrl(recording.filename);
+      .upload(processedFilename, responseBuffer, {
+        contentType: 'audio/wav',
+        upsert: true
+      });
 
-    const hf = new HfInference(HUGGING_FACE_API_KEY);
+    if (uploadError) {
+      console.error('Error uploading processed audio:', uploadError);
+      
+      await supabase
+        .from('recordings')
+        .update({
+          status: 'failed',
+          error_message: `Error uploading processed audio: ${uploadError.message}`
+        })
+        .eq('id', recordingId);
+        
+      return new Response(
+        JSON.stringify({ error: 'Error uploading processed audio' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
 
-    // We'll need to implement the actual audio processing here
-    // For now, this is a placeholder that demonstrates the flow
-    const output = publicUrl; // Replace with actual HF processing
+    // Get the URL of the processed audio
+    const { data: urlData } = await supabase.storage
+      .from('recordings')
+      .getPublicUrl(processedFilename);
 
-    // Update recording with the processed audio URL
-    await supabase
+    // Update the recording with the processed audio URL
+    const { error: finalUpdateError } = await supabase
       .from('recordings')
       .update({
         status: 'completed',
-        processed_audio_url: output,
+        processed_audio_url: urlData.publicUrl
       })
       .eq('id', recordingId);
 
+    if (finalUpdateError) {
+      console.error('Error updating recording with processed audio URL:', finalUpdateError);
+      return new Response(
+        JSON.stringify({ error: 'Error updating recording with processed audio URL' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    console.log(`Successfully processed recording ${recordingId} with HuggingFace`);
+    
     return new Response(
-      JSON.stringify({ output }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ 
+        success: true, 
+        message: 'Recording processed successfully',
+        url: urlData.publicUrl
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error) {
-    console.error('Error in HuggingFace processing:', error);
+    console.error('Error processing audio with HuggingFace:', error);
     
-    // Update recording status to failed if we have the recordingId
-    try {
-      const { recordingId } = await req.json();
-      if (recordingId) {
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
+    // Only try to update the recording if we have a recordingId from the outer scope
+    if (recordingId) {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+        const supabase = createClient(supabaseUrl, supabaseKey);
         
         await supabase
           .from('recordings')
           .update({
             status: 'failed',
-            error_message: error.message
+            error_message: `Error processing audio with HuggingFace: ${error instanceof Error ? error.message : 'Unknown error'}`
           })
           .eq('id', recordingId);
+      } catch (updateError) {
+        console.error('Error updating recording status after failure:', updateError);
       }
-    } catch (updateError) {
-      console.error('Error updating recording status:', updateError);
     }
-
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: `Error processing audio with HuggingFace: ${error instanceof Error ? error.message : 'Unknown error'}` }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });
