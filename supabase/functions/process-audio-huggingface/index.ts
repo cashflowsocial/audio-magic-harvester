@@ -95,22 +95,29 @@ serve(async (req) => {
     
     // Process the audio based on the type
     if (type === 'hf-drums') {
-      // For Hugging Face Drums - Using AudioLDM2
+      // For Hugging Face Drums - Using Harmonai's Dance Diffusion for beat generation
       const audioBlob = new Blob([fileData], { type: 'audio/wav' });
       const formData = new FormData();
       formData.append('file', audioBlob, 'audio.wav');
-      formData.append('text', prompt || 'Convert this to drum beats'); 
       
-      const apiUrl = "https://api-inference.huggingface.co/models/cvssp/audioldm-m-full";
-      console.log("Using AudioLDM2 for drum generation with prompt:", prompt || 'Convert this to drum beats');
+      // Use AudioCraft model which is less than 10GB and available for inference API
+      const apiUrl = "https://api-inference.huggingface.co/models/facebook/musicgen-small";
+      console.log("Using MusicGen for drum generation with prompt:", prompt || 'Create a drum beat with strong kicks and snares');
+      
+      const drumPrompt = prompt || 'Create a drum beat with strong kicks and snares';
       
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${huggingFaceApiKey}`
-          // Note: Don't set Content-Type when using FormData
+          'Authorization': `Bearer ${huggingFaceApiKey}`,
+          'Content-Type': 'application/json'
         },
-        body: formData
+        body: JSON.stringify({
+          inputs: drumPrompt,
+          parameters: {
+            max_new_tokens: 512
+          }
+        })
       });
       
       if (!response.ok) {
@@ -132,6 +139,8 @@ serve(async (req) => {
       const apiUrl = "https://api-inference.huggingface.co/models/facebook/musicgen-small";
       console.log("Using MusicGen for melody generation");
       
+      const melodyPrompt = prompt || "Extract and enhance the melody from this audio";
+      
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
@@ -139,10 +148,7 @@ serve(async (req) => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          inputs: {
-            audio_file: `data:audio/wav;base64,${base64Audio}`,
-            text: prompt || "Extract and enhance the melody from this audio"
-          }
+          inputs: melodyPrompt
         })
       });
       
