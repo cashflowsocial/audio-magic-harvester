@@ -1,6 +1,7 @@
 
 import { ExtractButton } from "./ExtractButton";
 import { useAudioProcessing } from "./useAudioProcessing";
+import { PromptInput } from "./PromptInput";
 
 interface ExtractButtonsProps {
   recordingId: string | null;
@@ -15,11 +16,13 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
     handleCancel,
     handleExtract,
     getProcessingTime,
-    recording
+    recording,
+    prompt,
+    setPrompt
   } = useAudioProcessing(recordingId);
 
   const renderExtractButton = (type: 'drums' | 'melody' | 'hf-drums' | 'hf-melody' | 'kits-drums' | 'kits-melody') => {
-    const isProcessing = processingType === type || recording?.status === 'processing';
+    const isProcessing = processingType === type || (recording?.status === 'processing' && recording.processing_type === type);
     const processingTime = getProcessingTime(type);
     const isComplete = recording?.status === 'completed' && recording.processing_type === type;
     
@@ -50,6 +53,14 @@ export const ExtractButtons = ({ recordingId, disabled }: ExtractButtonsProps) =
 
   return (
     <div className="flex flex-col gap-3 w-full max-w-sm">
+      <div className="mb-4 w-full">
+        <PromptInput 
+          prompt={prompt}
+          setPrompt={setPrompt}
+          disabled={disabled || !!processingType}
+        />
+      </div>
+    
       <div className="space-y-2">
         <h3 className="text-sm font-medium">MusicGen Processing</h3>
         {renderExtractButton('drums')}

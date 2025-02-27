@@ -128,11 +128,37 @@ export const useAudioProcessing = (recordingId: string | null) => {
       return data;
     } catch (error) {
       console.error(`Error extracting ${type}:`, error);
+      
+      // Special handling for Edge Function non-2xx responses
+      let errorMessage = error instanceof Error ? error.message : `Failed to extract ${type}. Please try again.`;
+      
+      // If it's a Kits.ai error, try to provide more specific error information
+      if (type.startsWith('kits') && errorMessage.includes('Edge Function returned a non-2xx status code')) {
+        errorMessage = `Kits.ai service error. This could be due to rate limiting, invalid audio format, or service unavailability. Please try again later.`;
+      }
+      
       toast({
         variant: "destructive",
         title: "Processing Failed",
-        description: error instanceof Error ? error.message : `Failed to extract ${type}. Please try again.`,
+        description: errorMessage,
       });
+      
+      // Try to update the recording status in case the edge function didn't
+      try {
+        if (recordingId) {
+          await supabase
+            .from('recordings')
+            .update({
+              status: 'failed',
+              error_message: errorMessage
+            })
+            .eq('id', recordingId);
+        }
+      } catch (updateError) {
+        console.error('Failed to update recording status after error:', updateError);
+      }
+      
+      await refetch();
     } finally {
       setProcessingType(null);
       setStartTimes(prev => {
