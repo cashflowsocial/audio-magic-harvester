@@ -101,15 +101,6 @@ serve(async (req) => {
 
     console.log(`Downloaded recording ${updatedRecording.filename}, size: ${fileData.size} bytes`);
 
-    // Verify file extension
-    if (!updatedRecording.filename.toLowerCase().endsWith('.wav')) {
-      console.warn(`File doesn't have .wav extension: ${updatedRecording.filename}. Will fix extension for Kits.ai processing.`);
-    }
-
-    // Create a file with proper extension for Kits.ai
-    // Using a explicit .wav extension and mimetype
-    const wavFilename = `recording.wav`;
-
     // Prepare Kits.ai request with the updated model IDs
     const voiceModelId = type === 'kits-drums' ? '212569' : '221129';
     console.log(`Using Kits.ai model ID: ${voiceModelId} for ${type}`);
@@ -117,11 +108,12 @@ serve(async (req) => {
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     
-    // Create a proper WAV file with correct extension and MIME type
-    const wavBlob = new Blob([fileData], { type: 'audio/wav' });
-    formData.append('soundFile', wavBlob, wavFilename);
+    // Create a proper file with correct extension and MIME type
+    // Force .wav extension for Kits.ai compatibility
+    const soundFile = new File([fileData], "recording.wav", { type: "audio/wav" });
+    formData.append('soundFile', soundFile);
     
-    console.log(`Sending to Kits.ai: model=${voiceModelId}, filename=${wavFilename}, size=${wavBlob.size} bytes`);
+    console.log(`Sending to Kits.ai: model=${voiceModelId}, fileName=recording.wav, size=${soundFile.size} bytes, type=${soundFile.type}`);
 
     // Call Kits.ai API
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {

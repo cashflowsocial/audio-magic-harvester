@@ -52,8 +52,18 @@ export const useAudioRecorder = () => {
       
       updateAudioLevel();
 
-      // Explicitly set audio/wav MIME type for compatibility with Kits.ai
-      const options = { mimeType: 'audio/wav' };
+      // Try to use a compatible audio format for Kits.ai
+      let mimeType = 'audio/wav';
+      let options = { mimeType };
+      
+      // Fallback if wav is not supported
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        console.log('audio/wav not supported, trying audio/webm');
+        mimeType = 'audio/webm';
+        options = { mimeType };
+      }
+      
+      console.log(`Using recording MIME type: ${mimeType}`);
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -65,11 +75,12 @@ export const useAudioRecorder = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        // Create a WAV blob from the chunks
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
+        // Create a blob with a proper mime type
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         setIsProcessing(true);
         
         try {
+          console.log(`Recording completed, blob type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
           const processedAudio = await processAudio(audioBlob);
           const result = await saveToStorage(processedAudio);
           setCurrentRecording(result.url);
