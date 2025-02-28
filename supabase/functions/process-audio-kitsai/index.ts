@@ -107,10 +107,31 @@ serve(async (req) => {
       throw new Error(`Invalid file format. Kits.ai requires .wav files, found: ${updatedRecording.filename.split('.').pop()}`);
     }
 
-    // Prepare Kits.ai request with the updated model IDs
+    // Get the appropriate voice model ID
     const voiceModelId = type === 'kits-drums' ? '212569' : '221129';
     console.log(`Using Kits.ai model ID: ${voiceModelId} for ${type}`);
+
+    // First, get the voice model details from Kits.ai
+    const voiceModelResponse = await fetch(
+      `https://arpeggi.io/api/kits/v1/voice-models/${voiceModelId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${kitsApiKey}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (!voiceModelResponse.ok) {
+      const errorText = await voiceModelResponse.text();
+      console.error(`Kits.ai voice model API error: ${errorText}`);
+      throw new Error(`Kits.ai voice model API error: ${voiceModelResponse.status} - ${errorText}`);
+    }
+
+    const voiceModel = await voiceModelResponse.json();
+    console.log(`Retrieved voice model: ${voiceModel.name || voiceModelId}`);
     
+    // Now create the conversion with the model
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     
@@ -121,7 +142,7 @@ serve(async (req) => {
     
     console.log(`Sending to Kits.ai: model=${voiceModelId}, fileName=${fileName}, size=${soundFile.size} bytes, type=${soundFile.type}`);
 
-    // Call Kits.ai API
+    // Call Kits.ai voice conversion API
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${kitsApiKey}` },
@@ -130,8 +151,8 @@ serve(async (req) => {
 
     if (!conversionResponse.ok) {
       const errorText = await conversionResponse.text();
-      console.error(`Kits.ai API error response: ${errorText}`);
-      throw new Error(`Kits.ai API error: ${conversionResponse.status} - ${errorText}`);
+      console.error(`Kits.ai conversion API error: ${errorText}`);
+      throw new Error(`Kits.ai conversion API error: ${conversionResponse.status} - ${errorText}`);
     }
 
     const conversionData = await conversionResponse.json();
@@ -140,6 +161,8 @@ serve(async (req) => {
     if (!conversionId) {
       throw new Error('No conversion ID returned from Kits.ai API');
     }
+
+    console.log(`Created conversion with ID: ${conversionId}`);
 
     // Poll for completion
     let outputFileUrl: string | null = null;
@@ -166,11 +189,15 @@ serve(async (req) => {
 
       if (statusData.status === 'success') {
         outputFileUrl = statusData.outputFileUrl || statusData.lossyOutputFileUrl;
+        console.log(`Conversion successful. Output URL: ${outputFileUrl}`);
         break;
       } else if (statusData.status === 'error' || statusData.status === 'failed') {
         throw new Error(`Conversion failed: ${statusData.error || 'Unknown error'}`);
+      } else {
+        console.log(`Conversion status: ${statusData.status}. Waiting...`);
       }
 
+      // Wait 10 seconds before checking again
       await new Promise(resolve => setTimeout(resolve, 10000));
     }
 
@@ -179,6 +206,7 @@ serve(async (req) => {
     }
 
     // Download converted audio
+    console.log(`Downloading converted audio from ${outputFileUrl}`);
     const audioResponse = await fetch(outputFileUrl);
     if (!audioResponse.ok) {
       throw new Error(`Failed to download converted audio: ${audioResponse.status}`);
@@ -188,6 +216,7 @@ serve(async (req) => {
     const processedFilename = `${type}-${Date.now()}.wav`;
 
     // Upload processed audio
+    console.log(`Uploading processed audio as ${processedFilename}`);
     const { error: uploadError } = await supabase.storage
       .from('recordings')
       .upload(processedFilename, audioBuffer, {
@@ -207,6 +236,8 @@ serve(async (req) => {
     if (!urlData?.publicUrl) {
       throw new Error('Failed to get public URL for processed audio');
     }
+
+    console.log(`Processed audio available at: ${urlData.publicUrl}`);
 
     // Update recording with final status
     const { error: finalUpdateError } = await supabase
