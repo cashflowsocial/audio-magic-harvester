@@ -54,7 +54,7 @@ export const useAudioRecorder = () => {
 
       // Try to use MP3 format for compatibility with Kits.ai
       let mimeType = 'audio/mpeg';
-      let options = { mimeType };
+      let options: MediaRecorderOptions = { mimeType };
       
       // Fallback options if MP3 is not supported
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -64,11 +64,12 @@ export const useAudioRecorder = () => {
         
         if (!MediaRecorder.isTypeSupported(mimeType)) {
           console.log('audio/webm not supported, trying default recorder');
-          options = {}; // Use browser default
+          // Use default options without specifying mimeType
+          options = {};
         }
       }
       
-      console.log(`Using recording MIME type: ${mimeType || 'browser default'}`);
+      console.log(`Using recording MIME type: ${options.mimeType || 'browser default'}`);
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -81,7 +82,7 @@ export const useAudioRecorder = () => {
 
       mediaRecorder.onstop = async () => {
         // Create a blob with the proper mime type for MP3
-        const finalMimeType = mimeType || 'audio/mpeg';
+        const finalMimeType = options.mimeType || 'audio/mpeg';
         const audioBlob = new Blob(chunksRef.current, { type: finalMimeType });
         setIsProcessing(true);
         
