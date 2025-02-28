@@ -58,6 +58,9 @@ serve(async (req) => {
       throw new Error("Invalid JSON input");
     }
 
+    // Log the entire request body to help with debugging
+    console.log("Received request body:", JSON.stringify(body));
+
     const { recordingId: reqRecordingId, type, conversionStrength = 0.5, modelVolumeMix = 0.5, pitchShift = 0 } = body;
     recordingId = reqRecordingId;
 
@@ -65,20 +68,24 @@ serve(async (req) => {
       throw new Error('Recording ID is required');
     }
 
-    if (!MODEL_IDS[type]) {
-      throw new Error(`Invalid processing type. Expected "kits-drums" or "kits-melody", received: ${type}`);
+    // Map the frontend type to "drums" or "melody" if needed
+    const processedType = type;
+    
+    // Check if we have a model ID for this type
+    if (!MODEL_IDS[processedType]) {
+      throw new Error(`Invalid processing type. Expected "kits-drums" or "kits-melody", received: ${processedType}`);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const kitsApiKey = Deno.env.get('KITS_API_KEY');
+    const kitsApiKey = Deno.env.get('KITS_API_KEY') || Deno.env.get('KITS.AI_API_KEY');
 
     if (!supabaseUrl || !supabaseKey || !kitsApiKey) {
       throw new Error('Missing required environment variables');
     }
 
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log(`Processing recording ${recordingId} for ${type}`);
+    console.log(`Processing recording ${recordingId} for ${processedType}`);
 
     // Update recording status to processing
     await supabase
@@ -89,7 +96,8 @@ serve(async (req) => {
       })
       .eq('id', recordingId);
 
-    const voiceModelId = MODEL_IDS[type];
+    const voiceModelId = MODEL_IDS[processedType];
+    console.log(`Using voice model ID: ${voiceModelId}`);
 
     // Fetch recording metadata
     const { data: recording, error: fetchError } = await supabase
