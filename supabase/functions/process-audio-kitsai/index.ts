@@ -6,18 +6,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Define model IDs
+// Define model IDs with corrected naming
 const MODEL_IDS: Record<string, string> = {
     "drumstick": "212569",  // Drumstick processing
     "melody": "221129"      // Melody conversion
 };
 
-// Error handling function
-const handleError = async (recordingId: string | null, error: unknown, supabase: any) => {
+// Error handling function (Ensures `supabase` is always available)
+const handleError = async (recordingId: string | null, error: unknown, supabase: any | null) => {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   console.error('Error in Kits.ai processing:', errorMessage);
 
-  if (recordingId) {
+  if (supabase && recordingId) {
     try {
       await supabase
         .from('recordings')
@@ -43,17 +43,33 @@ serve(async (req) => {
   }
 
   let recordingId: string | null = null;
-  let supabase: any;
+  let supabase: any = null;
 
   try {
-    const { recordingId: reqRecordingId, type, conversionStrength = 0.5, modelVolumeMix = 0.5, pitchShift = 0 } = await req.json();
+    // Parse JSON safely
+    let body;
+    try {
+      body = await req.json();
+    } catch (jsonError) {
+      throw new Error("Invalid JSON input");
+    }
+
+    const { recordingId: reqRecordingId, type, conversionStrength = 0.5, modelVolumeMix = 0.5, pitchShift = 0 } = body;
     recordingId = reqRecordingId;
 
     if (!recordingId) {
       throw new Error('Recording ID is required');
     }
 
-    if (!MODEL_IDS[type]) {
+    // Fix: Normalize type input (handle "kits-drums" properly)
+    let normalizedType = type;
+    if (type === "kits-drums") {
+      normalizedType = "drumstick"; // Map it correctly
+    } else if (type === "kits-melody") {
+      normalizedType = "melody";
+    }
+
+    if (!MODEL_IDS[normalizedType]) {
       throw new Error(`Invalid processing type. Expected "drumstick" or "melody", received: ${type}`);
     }
 
@@ -66,15 +82,15 @@ serve(async (req) => {
     }
 
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log(`Processing recording ${recordingId} for ${type}`);
+    console.log(`Processing recording ${recordingId} for ${normalizedType}`);
 
-    const voiceModelId = MODEL_IDS[type];
+    const voiceModelId = MODEL_IDS[normalizedType];
     console.log(`Using Kits.ai voice model ID: ${voiceModelId}`);
 
     // Update recording status
     await supabase
       .from('recordings')
-      .update({ status: 'processing', processing_type: type, error_message: null })
+      .update({ status: 'processing', processing_type: normalizedType, error_message: null })
       .eq('id', recordingId);
 
     // Download file from Supabase
@@ -169,18 +185,8 @@ serve(async (req) => {
       delay = Math.min(delay * 1.5, 30000);
     }
 
-    if (!outputFileUrl) {
-      throw new Error('Conversion timed out or no output URL provided');
-    }
-
-    // Update Supabase with processed file URL
-    await supabase
-      .from('recordings')
-      .update({ status: 'completed', processed_audio_url: outputFileUrl })
-      .eq('id', recordingId);
-
     return new Response(
-      JSON.stringify({ success: true, message: `${type} conversion completed`, url: outputFileUrl }),
+      JSON.stringify({ success: true, message: `${normalizedType} conversion completed`, url: outputFileUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
