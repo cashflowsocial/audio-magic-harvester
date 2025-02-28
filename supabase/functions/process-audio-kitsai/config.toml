@@ -1,5 +1,8 @@
 
 project_id = "usnkfgchcyrobingibqi"
-
-[functions.process-audio-kitsai]
-verify_jwt = false
+import_map = [
+  {
+    "base64": "https://deno.land/std@0.159.0/encoding/base64.ts",
+    "jszip": "https://deno.land/x/jszip@0.11.0/mod.ts"
+  }
+]

@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -9,10 +10,10 @@ const corsHeaders = {
 // **Only allow these file formats**
 const ALLOWED_FORMATS = ["wav", "mp3", "flac"];
 
-// Define voice model IDs
+// Map our frontend type names to Kits.ai model IDs
 const MODEL_IDS: Record<string, string> = {
-    "drumstick": "212569",
-    "melody": "221129"
+  "kits-drums": "212569",    // Gritty Tape Drums
+  "kits-melody": "221129"    // Female Rock/Pop
 };
 
 // Error handling function
@@ -65,7 +66,7 @@ serve(async (req) => {
     }
 
     if (!MODEL_IDS[type]) {
-      throw new Error(`Invalid processing type. Expected "drumstick" or "melody", received: ${type}`);
+      throw new Error(`Invalid processing type. Expected "kits-drums" or "kits-melody", received: ${type}`);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -78,6 +79,15 @@ serve(async (req) => {
 
     supabase = createClient(supabaseUrl, supabaseKey);
     console.log(`Processing recording ${recordingId} for ${type}`);
+
+    // Update recording status to processing
+    await supabase
+      .from('recordings')
+      .update({
+        status: 'processing',
+        processing_type: type
+      })
+      .eq('id', recordingId);
 
     const voiceModelId = MODEL_IDS[type];
 
@@ -106,7 +116,8 @@ serve(async (req) => {
     let fileExtension = fileName.split('.').pop()?.toLowerCase();
 
     if (!fileExtension || !ALLOWED_FORMATS.includes(fileExtension)) {
-      throw new Error(`Invalid file format! Allowed: ${ALLOWED_FORMATS.join(", ")}. Received: ${fileExtension}`);
+      // If extension is not valid, force it to be .wav
+      fileExtension = "wav";
     }
 
     // **Determine MIME type correctly**
@@ -120,7 +131,8 @@ serve(async (req) => {
     console.log(`MIME Type: ${mimeType}`);
     console.log(`File Size: ${fileData.size} bytes`);
 
-    const soundFile = new File([fileData], fileName, { type: mimeType });
+    // Create a file with explicit .wav extension for Kits.ai
+    const soundFile = new File([fileData], `recording.${fileExtension}`, { type: mimeType });
 
     // **Prepare API request**
     const formData = new FormData();
@@ -131,6 +143,7 @@ serve(async (req) => {
     formData.append('pitchShift', pitchShift.toString());
 
     // **Send request to Kits.ai**
+    console.log(`Sending request to Kits.ai with model ID: ${voiceModelId}`);
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${kitsApiKey}` },
@@ -176,14 +189,60 @@ serve(async (req) => {
         outputFileUrl = statusData.outputFileUrl || statusData.lossyOutputFileUrl;
         console.log(`Conversion successful. Output URL: ${outputFileUrl}`);
         break;
+      } else if (statusData.status === 'failed') {
+        throw new Error(`Kits.ai conversion failed: ${statusData.errorMessage || 'Unknown error'}`);
       }
 
       await new Promise(resolve => setTimeout(resolve, delay));
       delay = Math.min(delay * 1.5, 30000);
     }
 
+    if (!outputFileUrl) {
+      throw new Error('Failed to get output URL after maximum polling attempts');
+    }
+
+    // Download the processed audio from Kits.ai
+    console.log(`Downloading processed audio from: ${outputFileUrl}`);
+    const processedAudioResponse = await fetch(outputFileUrl);
+    if (!processedAudioResponse.ok) {
+      throw new Error(`Failed to download processed audio: ${processedAudioResponse.status}`);
+    }
+
+    const processedAudioBlob = await processedAudioResponse.blob();
+    
+    // Upload processed audio to Supabase Storage
+    const processedFileName = `${type}-${Date.now()}.wav`;
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('recordings')
+      .upload(processedFileName, processedAudioBlob, {
+        contentType: 'audio/wav'
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
+    }
+
+    // Get public URL for the processed audio
+    const { data: urlData } = await supabase.storage
+      .from('recordings')
+      .getPublicUrl(processedFileName);
+
+    // Update recording with processed audio URL and status
+    await supabase
+      .from('recordings')
+      .update({
+        status: 'completed',
+        processed_audio_url: urlData.publicUrl,
+        processing_type: type
+      })
+      .eq('id', recordingId);
+
     return new Response(
-      JSON.stringify({ success: true, message: `${type} conversion completed`, url: outputFileUrl }),
+      JSON.stringify({ 
+        success: true, 
+        message: `${type} conversion completed`, 
+        url: urlData.publicUrl 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
