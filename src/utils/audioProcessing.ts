@@ -29,24 +29,23 @@ export const processAudio = async (audioBlob: Blob): Promise<Blob> => {
 
 export const saveToStorage = async (audioBlob: Blob) => {
   try {
-    // Ensure the audio is saved as WAV for compatibility with all processors
-    // This is critical for Kits.ai which requires specific audio formats
-    const filename = `recording-${Date.now()}.wav`;
+    // Save as MP3 for compatibility with Kits.ai
+    const filename = `recording-${Date.now()}.mp3`;
     
-    // Convert blob to WAV if it's not already
+    // If the blob is not already an MP3 file, ensure it's set with the right MIME type
+    // Note: For a complete solution, actual audio conversion would be needed
+    // but for now we'll use MIME type setting to help with compatibility
     let blobToUpload = audioBlob;
-    
-    // If the blob is not already a WAV file, we need to ensure it's in the right format
-    if (audioBlob.type !== 'audio/wav') {
-      console.log(`Converting from ${audioBlob.type} to audio/wav for Kits.ai compatibility`);
-      blobToUpload = new Blob([audioBlob], { type: 'audio/wav' });
+    if (audioBlob.type !== 'audio/mpeg') {
+      console.log(`Setting MIME type to audio/mpeg for Kits.ai compatibility`);
+      blobToUpload = new Blob([audioBlob], { type: 'audio/mpeg' });
     }
     
     // Upload the audio file to Supabase Storage
     const { data, error } = await supabase.storage
       .from('recordings')
       .upload(filename, blobToUpload, {
-        contentType: 'audio/wav' // Explicitly set the content type
+        contentType: 'audio/mpeg' // Explicitly set the content type to MP3
       });
 
     if (error) throw error;
