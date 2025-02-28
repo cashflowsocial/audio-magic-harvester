@@ -6,6 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Define model IDs
 const MODEL_IDS: Record<string, string> = {
     "drumstick": "212569",  // Drumstick processing
     "melody": "221129"      // Melody conversion
@@ -18,18 +19,13 @@ const handleError = async (recordingId: string | null, error: unknown, supabase:
 
   if (recordingId) {
     try {
-      const { error: updateError } = await supabase
+      await supabase
         .from('recordings')
         .update({
           status: 'failed',
           error_message: `Error in Kits.ai processing: ${errorMessage}`
         })
-        .eq('id', recordingId)
-        .select();
-
-      if (updateError) {
-        console.error('Failed to update recording status:', updateError);
-      }
+        .eq('id', recordingId);
     } catch (updateError) {
       console.error('Error updating recording status:', updateError);
     }
@@ -37,10 +33,7 @@ const handleError = async (recordingId: string | null, error: unknown, supabase:
 
   return new Response(
     JSON.stringify({ error: errorMessage }),
-    { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-      status: 500 
-    }
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
   );
 };
 
@@ -53,7 +46,7 @@ serve(async (req) => {
   let supabase: any;
 
   try {
-    const { recordingId: reqRecordingId, type, prompt } = await req.json();
+    const { recordingId: reqRecordingId, type, conversionStrength = 0.5, modelVolumeMix = 0.5, pitchShift = 0 } = await req.json();
     recordingId = reqRecordingId;
 
     if (!recordingId) {
@@ -79,49 +72,50 @@ serve(async (req) => {
     console.log(`Using Kits.ai voice model ID: ${voiceModelId}`);
 
     // Update recording status
-    const { data: updatedRecording, error: updateError } = await supabase
+    await supabase
       .from('recordings')
-      .update({
-        status: 'processing',
-        processing_type: type,
-        prompt: prompt || null,
-        error_message: null 
-      })
+      .update({ status: 'processing', processing_type: type, error_message: null })
+      .eq('id', recordingId);
+
+    // Download file from Supabase
+    const { data: recording, error: fetchError } = await supabase
+      .from('recordings')
+      .select('filename')
       .eq('id', recordingId)
-      .select()
       .maybeSingle();
 
-    if (updateError) {
-      throw new Error(`Failed to update recording status: ${updateError.message}`);
+    if (fetchError || !recording) {
+      throw new Error(`Failed to fetch recording metadata: ${fetchError?.message || 'Recording not found'}`);
     }
 
-    if (!updatedRecording) {
-      throw new Error('Recording not found in database.');
-    }
-
-    // Download recording file
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('recordings')
-      .download(updatedRecording.filename);
+      .download(recording.filename);
 
     if (downloadError || !fileData) {
       throw new Error(`Failed to download audio file: ${downloadError?.message || 'File not found'}`);
     }
 
-    console.log(`Downloaded recording ${updatedRecording.filename}, size: ${fileData.size} bytes`);
-
     // Validate file format
-    if (!updatedRecording.filename.toLowerCase().endsWith('.wav') || fileData.type !== 'audio/wav') {
-      throw new Error(`Invalid file format. Expected WAV but received ${fileData.type}`);
+    const fileName = recording.filename.split('/').pop() || "recording.wav";
+    const fileExtension = fileName.split('.').pop()?.toLowerCase();
+    const allowedExtensions = ["wav", "mp3", "flac"];
+    
+    if (!fileExtension || !allowedExtensions.includes(fileExtension)) {
+      throw new Error(`Invalid file format. Allowed formats: ${allowedExtensions.join(", ")}`);
     }
 
-    // Send file for processing
+    const soundFile = new File([fileData], fileName, { type: `audio/${fileExtension}` });
+
+    // Prepare API request
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
-    const fileName = updatedRecording.filename.split('/').pop() || "recording.wav";
-    const soundFile = new File([fileData], fileName, { type: "audio/wav" });
     formData.append('soundFile', soundFile);
+    formData.append('conversionStrength', conversionStrength.toString());
+    formData.append('modelVolumeMix', modelVolumeMix.toString());
+    formData.append('pitchShift', pitchShift.toString());
 
+    // Send request to Kits.ai
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${kitsApiKey}` },
@@ -142,7 +136,7 @@ serve(async (req) => {
 
     console.log(`Created conversion with ID: ${conversionId}`);
 
-    // Polling for conversion completion
+    // Poll conversion status
     let outputFileUrl: string | null = null;
     const maxAttempts = 30;
     let delay = 5000;
@@ -153,10 +147,7 @@ serve(async (req) => {
       const statusResponse = await fetch(
         `https://arpeggi.io/api/kits/v1/voice-conversions/${conversionId}`,
         {
-          headers: {
-            'Authorization': `Bearer ${kitsApiKey}`,
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Authorization': `Bearer ${kitsApiKey}`, 'Content-Type': 'application/json' }
         }
       );
 
@@ -182,28 +173,14 @@ serve(async (req) => {
       throw new Error('Conversion timed out or no output URL provided');
     }
 
-    // Update recording status
-    const { error: finalUpdateError } = await supabase
+    // Update Supabase with processed file URL
+    await supabase
       .from('recordings')
-      .update({
-        status: 'completed',
-        processed_audio_url: outputFileUrl,
-        error_message: null
-      })
-      .eq('id', recordingId)
-      .select()
-      .maybeSingle();
-
-    if (finalUpdateError) {
-      throw new Error(`Failed to update recording with processed URL: ${finalUpdateError.message}`);
-    }
+      .update({ status: 'completed', processed_audio_url: outputFileUrl })
+      .eq('id', recordingId);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        message: `${type} conversion completed`,
-        url: outputFileUrl
-      }),
+      JSON.stringify({ success: true, message: `${type} conversion completed`, url: outputFileUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
