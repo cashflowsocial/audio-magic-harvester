@@ -101,6 +101,12 @@ serve(async (req) => {
 
     console.log(`Downloaded recording ${updatedRecording.filename}, size: ${fileData.size} bytes`);
 
+    // FIXED: Proper file extension check - make sure we have a .wav file
+    // Kits.ai API is strict about requiring specific audio formats
+    if (!updatedRecording.filename.toLowerCase().endsWith('.wav')) {
+      throw new Error(`Invalid file format. Kits.ai requires .wav files, found: ${updatedRecording.filename.split('.').pop()}`);
+    }
+
     // Prepare Kits.ai request with the updated model IDs
     const voiceModelId = type === 'kits-drums' ? '212569' : '221129';
     console.log(`Using Kits.ai model ID: ${voiceModelId} for ${type}`);
@@ -108,12 +114,12 @@ serve(async (req) => {
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     
-    // Create a proper file with correct extension and MIME type
-    // Force .wav extension for Kits.ai compatibility
-    const soundFile = new File([fileData], "recording.wav", { type: "audio/wav" });
+    // Ensure we pass the file with the correct name and extension
+    const fileName = updatedRecording.filename.split('/').pop() || "recording.wav";
+    const soundFile = new File([fileData], fileName, { type: "audio/wav" });
     formData.append('soundFile', soundFile);
     
-    console.log(`Sending to Kits.ai: model=${voiceModelId}, fileName=recording.wav, size=${soundFile.size} bytes, type=${soundFile.type}`);
+    console.log(`Sending to Kits.ai: model=${voiceModelId}, fileName=${fileName}, size=${soundFile.size} bytes, type=${soundFile.type}`);
 
     // Call Kits.ai API
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
