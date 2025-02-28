@@ -1,7 +1,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
-import { saveToStorage, processAudio } from "@/utils/audioProcessing";
+import { saveToStorage, processAudio, validateAudioFormat } from "@/utils/audioProcessing";
 
 export const useAudioRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -52,24 +52,33 @@ export const useAudioRecorder = () => {
       
       updateAudioLevel();
 
-      // Try to use MP3 format for compatibility with Kits.ai
-      let mimeType = 'audio/mpeg';
-      let options: MediaRecorderOptions = { mimeType };
+      // Try different audio formats in order of preference for Kits.ai compatibility
+      const mimeTypes = [
+        'audio/mpeg',      // MP3 - best for Kits.ai
+        'audio/mp3',       // Alternative MP3 MIME type
+        'audio/webm',      // WebM - widely supported in browsers
+        'audio/wav'        // WAV - fallback
+      ];
       
-      // Fallback options if MP3 is not supported
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        console.log('audio/mpeg not supported, trying audio/webm');
-        mimeType = 'audio/webm';
-        options = { mimeType };
-        
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          console.log('audio/webm not supported, trying default recorder');
-          // Use default options without specifying mimeType
-          options = {};
+      let selectedMimeType: string | undefined;
+      let options: MediaRecorderOptions = {};
+      
+      // Find the first supported MIME type
+      for (const mimeType of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+          console.log(`Found supported MIME type: ${mimeType}`);
+          selectedMimeType = mimeType;
+          options = { mimeType };
+          break;
         }
       }
       
-      console.log(`Using recording MIME type: ${options.mimeType || 'browser default'}`);
+      if (!selectedMimeType) {
+        console.log('None of the preferred MIME types are supported, using browser default');
+      } else {
+        console.log(`Using recording MIME type: ${selectedMimeType}`);
+      }
+      
       const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -81,13 +90,25 @@ export const useAudioRecorder = () => {
       };
 
       mediaRecorder.onstop = async () => {
-        // Create a blob with the proper mime type for MP3
-        const finalMimeType = options.mimeType || 'audio/mpeg';
-        const audioBlob = new Blob(chunksRef.current, { type: finalMimeType });
+        // Create a blob with the final audio data
+        const audioBlob = new Blob(chunksRef.current, { 
+          type: selectedMimeType || 'audio/mpeg' 
+        });
+        
+        console.log(`Recording completed, blob type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
+        
+        // Validate the audio format
+        if (!validateAudioFormat(audioBlob)) {
+          toast({
+            title: "Warning",
+            description: "The recorded audio format may not be compatible with all features.",
+            variant: "destructive",
+          });
+        }
+        
         setIsProcessing(true);
         
         try {
-          console.log(`Recording completed, blob type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
           const processedAudio = await processAudio(audioBlob);
           const result = await saveToStorage(processedAudio);
           setCurrentRecording(result.url);
@@ -95,14 +116,14 @@ export const useAudioRecorder = () => {
           
           toast({
             title: "Success",
-            description: "Recording saved and analyzed successfully!",
+            description: "Recording saved and ready for processing!",
           });
           
         } catch (error) {
           console.error('Error processing/saving audio:', error);
           toast({
             title: "Error",
-            description: "Failed to save or analyze the recording.",
+            description: "Failed to save or process the recording.",
             variant: "destructive",
           });
         } finally {
