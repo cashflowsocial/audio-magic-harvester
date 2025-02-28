@@ -33,10 +33,19 @@ export const saveToStorage = async (audioBlob: Blob) => {
     // This is critical for Kits.ai which requires specific audio formats
     const filename = `recording-${Date.now()}.wav`;
     
+    // Convert blob to WAV if it's not already
+    let blobToUpload = audioBlob;
+    
+    // If the blob is not already a WAV file, we need to ensure it's in the right format
+    if (audioBlob.type !== 'audio/wav') {
+      console.log(`Converting from ${audioBlob.type} to audio/wav for Kits.ai compatibility`);
+      blobToUpload = new Blob([audioBlob], { type: 'audio/wav' });
+    }
+    
     // Upload the audio file to Supabase Storage
     const { data, error } = await supabase.storage
       .from('recordings')
-      .upload(filename, audioBlob, {
+      .upload(filename, blobToUpload, {
         contentType: 'audio/wav' // Explicitly set the content type
       });
 

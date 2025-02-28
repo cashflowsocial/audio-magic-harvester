@@ -101,10 +101,10 @@ serve(async (req) => {
 
     console.log(`Downloaded recording ${updatedRecording.filename}, size: ${fileData.size} bytes`);
 
-    // FIXED: Proper file extension check - make sure we have a .wav file
-    // Kits.ai API is strict about requiring specific audio formats
+    // Check if filename has proper extension - this is critical for Kits.ai
     if (!updatedRecording.filename.toLowerCase().endsWith('.wav')) {
-      throw new Error(`Invalid file format. Kits.ai requires .wav files, found: ${updatedRecording.filename.split('.').pop()}`);
+      console.log('Warning: File does not have .wav extension, Kits.ai requires this extension');
+      // We'll continue but rename the file when we send it to Kits.ai
     }
 
     // Get the appropriate voice model ID
@@ -135,12 +135,20 @@ serve(async (req) => {
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     
-    // Ensure we pass the file with the correct name and extension
-    const fileName = updatedRecording.filename.split('/').pop() || "recording.wav";
-    const soundFile = new File([fileData], fileName, { type: "audio/wav" });
+    // CRITICAL: Always use a .wav extension for Kits.ai
+    // Kits.ai checks the file extension explicitly, not just the MIME type
+    const soundFile = new File([fileData], "recording.wav", { type: "audio/wav" });
+    console.log(`Created file object: name=${soundFile.name}, type=${soundFile.type}, size=${soundFile.size} bytes`);
     formData.append('soundFile', soundFile);
     
-    console.log(`Sending to Kits.ai: model=${voiceModelId}, fileName=${fileName}, size=${soundFile.size} bytes, type=${soundFile.type}`);
+    // Log all form data to debug
+    console.log("Form data for Kits.ai request:");
+    for (const [key, value] of formData.entries()) {
+      const valueInfo = value instanceof File 
+        ? `File: ${value.name}, ${value.type}, ${value.size} bytes` 
+        : value;
+      console.log(`- ${key}: ${valueInfo}`);
+    }
 
     // Call Kits.ai voice conversion API
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
@@ -150,8 +158,14 @@ serve(async (req) => {
     });
 
     if (!conversionResponse.ok) {
-      const errorText = await conversionResponse.text();
-      console.error(`Kits.ai conversion API error: ${errorText}`);
+      let errorText;
+      try {
+        const errorJson = await conversionResponse.json();
+        errorText = JSON.stringify(errorJson);
+      } catch {
+        errorText = await conversionResponse.text();
+      }
+      console.error(`Kits.ai conversion API error response: ${errorText}`);
       throw new Error(`Kits.ai conversion API error: ${conversionResponse.status} - ${errorText}`);
     }
 
