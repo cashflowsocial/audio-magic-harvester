@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -7,12 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const MODEL_IDS: Record<string, string> = {
+    "drumstick": "212569",  // Drumstick processing
+    "melody": "221129"      // Melody conversion
+};
+
+// Error handling function
 const handleError = async (recordingId: string | null, error: unknown, supabase: any) => {
   const errorMessage = error instanceof Error ? error.message : 'Unknown error';
   console.error('Error in Kits.ai processing:', errorMessage);
-  if (error instanceof Error && error.stack) {
-    console.error('Error stack:', error.stack);
-  }
 
   if (recordingId) {
     try {
@@ -49,13 +51,17 @@ serve(async (req) => {
 
   let recordingId: string | null = null;
   let supabase: any;
-  
+
   try {
     const { recordingId: reqRecordingId, type, prompt } = await req.json();
     recordingId = reqRecordingId;
 
     if (!recordingId) {
       throw new Error('Recording ID is required');
+    }
+
+    if (!MODEL_IDS[type]) {
+      throw new Error(`Invalid processing type. Expected "drumstick" or "melody", received: ${type}`);
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -67,16 +73,19 @@ serve(async (req) => {
     }
 
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log(`Processing recording ${recordingId} with Kits.ai for ${type}`);
+    console.log(`Processing recording ${recordingId} for ${type}`);
 
-    // Update recording status to processing using upsert pattern
+    const voiceModelId = MODEL_IDS[type];
+    console.log(`Using Kits.ai voice model ID: ${voiceModelId}`);
+
+    // Update recording status
     const { data: updatedRecording, error: updateError } = await supabase
       .from('recordings')
       .update({
         status: 'processing',
         processing_type: type,
         prompt: prompt || null,
-        error_message: null // Clear any previous errors
+        error_message: null 
       })
       .eq('id', recordingId)
       .select()
@@ -87,10 +96,10 @@ serve(async (req) => {
     }
 
     if (!updatedRecording) {
-      throw new Error('Recording not found');
+      throw new Error('Recording not found in database.');
     }
 
-    // Get recording file
+    // Download recording file
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('recordings')
       .download(updatedRecording.filename);
@@ -101,56 +110,18 @@ serve(async (req) => {
 
     console.log(`Downloaded recording ${updatedRecording.filename}, size: ${fileData.size} bytes`);
 
-    // Check if filename has proper extension - this is critical for Kits.ai
-    if (!updatedRecording.filename.toLowerCase().endsWith('.wav')) {
-      console.log('Warning: File does not have .wav extension, Kits.ai requires this extension');
-      // We'll continue but rename the file when we send it to Kits.ai
+    // Validate file format
+    if (!updatedRecording.filename.toLowerCase().endsWith('.wav') || fileData.type !== 'audio/wav') {
+      throw new Error(`Invalid file format. Expected WAV but received ${fileData.type}`);
     }
 
-    // Get the appropriate voice model ID
-    const voiceModelId = type === 'kits-drums' ? '212569' : '221129';
-    console.log(`Using Kits.ai model ID: ${voiceModelId} for ${type}`);
-
-    // First, get the voice model details from Kits.ai
-    const voiceModelResponse = await fetch(
-      `https://arpeggi.io/api/kits/v1/voice-models/${voiceModelId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${kitsApiKey}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    if (!voiceModelResponse.ok) {
-      const errorText = await voiceModelResponse.text();
-      console.error(`Kits.ai voice model API error: ${errorText}`);
-      throw new Error(`Kits.ai voice model API error: ${voiceModelResponse.status} - ${errorText}`);
-    }
-
-    const voiceModel = await voiceModelResponse.json();
-    console.log(`Retrieved voice model: ${voiceModel.name || voiceModelId}`);
-    
-    // Now create the conversion with the model
+    // Send file for processing
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
-    
-    // CRITICAL: Always use a .wav extension for Kits.ai
-    // Kits.ai checks the file extension explicitly, not just the MIME type
-    const soundFile = new File([fileData], "recording.wav", { type: "audio/wav" });
-    console.log(`Created file object: name=${soundFile.name}, type=${soundFile.type}, size=${soundFile.size} bytes`);
+    const fileName = updatedRecording.filename.split('/').pop() || "recording.wav";
+    const soundFile = new File([fileData], fileName, { type: "audio/wav" });
     formData.append('soundFile', soundFile);
-    
-    // Log all form data to debug
-    console.log("Form data for Kits.ai request:");
-    for (const [key, value] of formData.entries()) {
-      const valueInfo = value instanceof File 
-        ? `File: ${value.name}, ${value.type}, ${value.size} bytes` 
-        : value;
-      console.log(`- ${key}: ${valueInfo}`);
-    }
 
-    // Call Kits.ai voice conversion API
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${kitsApiKey}` },
@@ -158,15 +129,8 @@ serve(async (req) => {
     });
 
     if (!conversionResponse.ok) {
-      let errorText;
-      try {
-        const errorJson = await conversionResponse.json();
-        errorText = JSON.stringify(errorJson);
-      } catch {
-        errorText = await conversionResponse.text();
-      }
-      console.error(`Kits.ai conversion API error response: ${errorText}`);
-      throw new Error(`Kits.ai conversion API error: ${conversionResponse.status} - ${errorText}`);
+      const errorText = await conversionResponse.text();
+      throw new Error(`Kits.ai conversion API error: ${errorText}`);
     }
 
     const conversionData = await conversionResponse.json();
@@ -178,10 +142,11 @@ serve(async (req) => {
 
     console.log(`Created conversion with ID: ${conversionId}`);
 
-    // Poll for completion
+    // Polling for conversion completion
     let outputFileUrl: string | null = null;
     const maxAttempts = 30;
-    
+    let delay = 5000;
+
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       console.log(`Polling conversion ${conversionId}, attempt ${attempt + 1}`);
 
@@ -207,58 +172,22 @@ serve(async (req) => {
         break;
       } else if (statusData.status === 'error' || statusData.status === 'failed') {
         throw new Error(`Conversion failed: ${statusData.error || 'Unknown error'}`);
-      } else {
-        console.log(`Conversion status: ${statusData.status}. Waiting...`);
       }
 
-      // Wait 10 seconds before checking again
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.5, 30000);
     }
 
     if (!outputFileUrl) {
       throw new Error('Conversion timed out or no output URL provided');
     }
 
-    // Download converted audio
-    console.log(`Downloading converted audio from ${outputFileUrl}`);
-    const audioResponse = await fetch(outputFileUrl);
-    if (!audioResponse.ok) {
-      throw new Error(`Failed to download converted audio: ${audioResponse.status}`);
-    }
-
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const processedFilename = `${type}-${Date.now()}.wav`;
-
-    // Upload processed audio
-    console.log(`Uploading processed audio as ${processedFilename}`);
-    const { error: uploadError } = await supabase.storage
-      .from('recordings')
-      .upload(processedFilename, audioBuffer, {
-        contentType: 'audio/wav',
-        upsert: true
-      });
-
-    if (uploadError) {
-      throw new Error(`Failed to upload processed audio: ${uploadError.message}`);
-    }
-
-    // Get public URL
-    const { data: urlData } = await supabase.storage
-      .from('recordings')
-      .getPublicUrl(processedFilename);
-
-    if (!urlData?.publicUrl) {
-      throw new Error('Failed to get public URL for processed audio');
-    }
-
-    console.log(`Processed audio available at: ${urlData.publicUrl}`);
-
-    // Update recording with final status
+    // Update recording status
     const { error: finalUpdateError } = await supabase
       .from('recordings')
       .update({
         status: 'completed',
-        processed_audio_url: urlData.publicUrl,
+        processed_audio_url: outputFileUrl,
         error_message: null
       })
       .eq('id', recordingId)
@@ -272,8 +201,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `${type === 'kits-drums' ? 'Drum' : 'Melody'} conversion completed`,
-        url: urlData.publicUrl
+        message: `${type} conversion completed`,
+        url: outputFileUrl
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
