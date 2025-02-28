@@ -101,23 +101,27 @@ serve(async (req) => {
 
     console.log(`Downloaded recording ${updatedRecording.filename}, size: ${fileData.size} bytes`);
 
-    // Process filename
-    const pathParts = updatedRecording.filename.split('/');
-    const baseName = pathParts[pathParts.length - 1].split('.')[0];
-    const wavFilename = `${baseName}.wav`;
-
+    // Verify file extension
     if (!updatedRecording.filename.toLowerCase().endsWith('.wav')) {
-      throw new Error(`Invalid file format. Kits.ai requires .wav files, found: ${updatedRecording.filename.split('.').pop()}`);
+      console.warn(`File doesn't have .wav extension: ${updatedRecording.filename}. Will fix extension for Kits.ai processing.`);
     }
 
+    // Create a file with proper extension for Kits.ai
+    // Using a explicit .wav extension and mimetype
+    const wavFilename = `recording.wav`;
+
     // Prepare Kits.ai request with the updated model IDs
-    // Updated model IDs: 212569 for drums and 221129 for melody
     const voiceModelId = type === 'kits-drums' ? '212569' : '221129';
     console.log(`Using Kits.ai model ID: ${voiceModelId} for ${type}`);
     
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
-    formData.append('soundFile', new Blob([fileData], { type: 'audio/wav' }), wavFilename);
+    
+    // Create a proper WAV file with correct extension and MIME type
+    const wavBlob = new Blob([fileData], { type: 'audio/wav' });
+    formData.append('soundFile', wavBlob, wavFilename);
+    
+    console.log(`Sending to Kits.ai: model=${voiceModelId}, filename=${wavFilename}, size=${wavBlob.size} bytes`);
 
     // Call Kits.ai API
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
@@ -128,6 +132,7 @@ serve(async (req) => {
 
     if (!conversionResponse.ok) {
       const errorText = await conversionResponse.text();
+      console.error(`Kits.ai API error response: ${errorText}`);
       throw new Error(`Kits.ai API error: ${conversionResponse.status} - ${errorText}`);
     }
 

@@ -29,12 +29,16 @@ export const processAudio = async (audioBlob: Blob): Promise<Blob> => {
 
 export const saveToStorage = async (audioBlob: Blob) => {
   try {
+    // Ensure the audio is saved as WAV for compatibility with all processors
+    // This is critical for Kits.ai which requires specific audio formats
     const filename = `recording-${Date.now()}.wav`;
     
     // Upload the audio file to Supabase Storage
     const { data, error } = await supabase.storage
       .from('recordings')
-      .upload(filename, audioBlob);
+      .upload(filename, audioBlob, {
+        contentType: 'audio/wav' // Explicitly set the content type
+      });
 
     if (error) throw error;
 

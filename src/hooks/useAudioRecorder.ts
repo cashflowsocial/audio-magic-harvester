@@ -52,7 +52,9 @@ export const useAudioRecorder = () => {
       
       updateAudioLevel();
 
-      const mediaRecorder = new MediaRecorder(stream);
+      // Explicitly set audio/wav MIME type for compatibility with Kits.ai
+      const options = { mimeType: 'audio/wav' };
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -63,6 +65,7 @@ export const useAudioRecorder = () => {
       };
 
       mediaRecorder.onstop = async () => {
+        // Create a WAV blob from the chunks
         const audioBlob = new Blob(chunksRef.current, { type: 'audio/wav' });
         setIsProcessing(true);
         
