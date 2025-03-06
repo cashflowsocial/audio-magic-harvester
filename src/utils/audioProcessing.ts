@@ -9,10 +9,10 @@ export const processAudio = async (audioBlob: Blob): Promise<Blob> => {
   try {
     console.log(`Processing audio of type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
     
-    // Ensure we have an MP3 blob with the correct MIME type
+    // Ensure we have a WAV blob with the correct MIME type
     // This doesn't actually convert the audio format but ensures the right MIME type is set
     const processedBlob = new Blob([audioBlob], { 
-      type: 'audio/mpeg' 
+      type: 'audio/wav' 
     });
     
     console.log(`Processed audio blob type: ${processedBlob.type}, size: ${processedBlob.size} bytes`);
@@ -25,11 +25,11 @@ export const processAudio = async (audioBlob: Blob): Promise<Blob> => {
 
 export const saveToStorage = async (audioBlob: Blob) => {
   try {
-    // Save explicitly as MP3 with the .mp3 extension for compatibility with Kits.ai
-    const filename = `recording-${Date.now()}.mp3`;
+    // Save explicitly as WAV with the .wav extension for compatibility with Kits.ai
+    const filename = `recording-${Date.now()}.wav`;
     
-    // Ensure the blob has the correct MIME type for MP3
-    const blobToUpload = new Blob([audioBlob], { type: 'audio/mpeg' });
+    // Ensure the blob has the correct MIME type for WAV
+    const blobToUpload = new Blob([audioBlob], { type: 'audio/wav' });
     
     console.log(`Uploading audio file: ${filename}, type: ${blobToUpload.type}, size: ${blobToUpload.size} bytes`);
     
@@ -37,7 +37,7 @@ export const saveToStorage = async (audioBlob: Blob) => {
     const { data, error } = await supabase.storage
       .from('recordings')
       .upload(filename, blobToUpload, {
-        contentType: 'audio/mpeg', // Explicitly set the content type to MP3
+        contentType: 'audio/wav', // Explicitly set the content type to WAV
         cacheControl: '3600',
         upsert: false // Ensure we don't overwrite existing files
       });

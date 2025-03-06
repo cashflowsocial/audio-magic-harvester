@@ -136,8 +136,8 @@ export const useAudioProcessing = (recordingId: string | null) => {
       if (type.startsWith('kits') && errorMessage.includes('Edge Function returned a non-2xx status code')) {
         // Check if the recording has a filename with the correct extension
         const fileExtension = recording?.filename?.split('.').pop()?.toLowerCase();
-        if (fileExtension !== 'mp3') {
-          errorMessage = `Kits.ai requires MP3 file format. Your file appears to be ${fileExtension || 'missing extension'}.`;
+        if (fileExtension !== 'wav') {
+          errorMessage = `Kits.ai requires WAV file format. Your file appears to be ${fileExtension || 'missing extension'}.`;
         } else {
           errorMessage = `Kits.ai service error. This could be due to file format issues, rate limiting, or service unavailability. Please try again later.`;
         }

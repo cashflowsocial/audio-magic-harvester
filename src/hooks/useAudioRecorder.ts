@@ -54,10 +54,10 @@ export const useAudioRecorder = () => {
 
       // Try different audio formats in order of preference for Kits.ai compatibility
       const mimeTypes = [
-        'audio/mpeg',      // MP3 - best for Kits.ai
-        'audio/mp3',       // Alternative MP3 MIME type
+        'audio/wav',       // WAV - best for Kits.ai with our current setup
         'audio/webm',      // WebM - widely supported in browsers
-        'audio/wav'        // WAV - fallback
+        'audio/mpeg',      // MP3 - fallback
+        'audio/mp3'        // Alternative MP3 MIME type
       ];
       
       let selectedMimeType: string | undefined;
@@ -92,7 +92,7 @@ export const useAudioRecorder = () => {
       mediaRecorder.onstop = async () => {
         // Create a blob with the final audio data
         const audioBlob = new Blob(chunksRef.current, { 
-          type: selectedMimeType || 'audio/mpeg' 
+          type: selectedMimeType || 'audio/wav' 
         });
         
         console.log(`Recording completed, blob type: ${audioBlob.type}, size: ${audioBlob.size} bytes`);
