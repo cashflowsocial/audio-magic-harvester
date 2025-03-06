@@ -7,9 +7,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// **Only allow these file formats**
-const ALLOWED_FORMATS = ["wav", "mp3", "flac"];
-
 // Map our frontend type names to Kits.ai model IDs
 const MODEL_IDS: Record<string, string> = {
   "kits-drums": "212569",    // Gritty Tape Drums
@@ -51,30 +48,23 @@ serve(async (req) => {
 
   try {
     // Parse JSON input
-    let body;
-    try {
-      body = await req.json();
-    } catch (jsonError) {
-      throw new Error("Invalid JSON input");
-    }
-
-    // Log the entire request body to help with debugging
+    const body = await req.json();
     console.log("Received request body:", JSON.stringify(body));
 
-    const { recordingId: reqRecordingId, type, conversionStrength = 0.5, modelVolumeMix = 0.5, pitchShift = 0 } = body;
+    const { recordingId: reqRecordingId, type, prompt, conversionStrength = 0.5, modelVolumeMix = 0.5, pitchShift = 0 } = body;
     recordingId = reqRecordingId;
 
     if (!recordingId) {
       throw new Error('Recording ID is required');
     }
 
-    // Map the frontend type to "drums" or "melody" if needed
-    const processedType = type;
-    
     // Check if we have a model ID for this type
-    if (!MODEL_IDS[processedType]) {
-      throw new Error(`Invalid processing type. Expected "kits-drums" or "kits-melody", received: ${processedType}`);
+    if (!MODEL_IDS[type]) {
+      throw new Error(`Invalid processing type. Expected "kits-drums" or "kits-melody", received: ${type}`);
     }
+    
+    const voiceModelId = MODEL_IDS[type];
+    console.log(`Using voice model ID: ${voiceModelId}`);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -85,19 +75,17 @@ serve(async (req) => {
     }
 
     supabase = createClient(supabaseUrl, supabaseKey);
-    console.log(`Processing recording ${recordingId} for ${processedType}`);
+    console.log(`Processing recording ${recordingId} for ${type}`);
 
     // Update recording status to processing
     await supabase
       .from('recordings')
       .update({
         status: 'processing',
-        processing_type: type
+        processing_type: type,
+        prompt: prompt || null
       })
       .eq('id', recordingId);
-
-    const voiceModelId = MODEL_IDS[processedType];
-    console.log(`Using voice model ID: ${voiceModelId}`);
 
     // Fetch recording metadata
     const { data: recording, error: fetchError } = await supabase
@@ -119,30 +107,26 @@ serve(async (req) => {
       throw new Error(`Failed to download audio file: ${downloadError?.message || 'File not found'}`);
     }
 
-    // Validate file format
-    const fileName = recording.filename.split('/').pop() || "recording.wav";
-    let fileExtension = fileName.split('.').pop()?.toLowerCase();
+    // Validate file format and extract filename/extension
+    const fileName = recording.filename;
+    const fileExtension = fileName.split('.').pop()?.toLowerCase();
 
-    if (!fileExtension || !ALLOWED_FORMATS.includes(fileExtension)) {
-      // If extension is not valid, force it to be .wav
-      fileExtension = "wav";
+    if (fileExtension !== 'wav') {
+      throw new Error(`Kits.ai requires WAV format. Current file extension: ${fileExtension || 'unknown'}`);
     }
 
-    // **Determine MIME type correctly**
-    const mimeType = fileExtension === "wav" ? "audio/wav" :
-                     fileExtension === "mp3" ? "audio/mpeg" :
-                     fileExtension === "flac" ? "audio/flac" : "application/octet-stream"; // Default fallback
+    // Explicitly set the MIME type to audio/wav
+    console.log(`File details before upload to Kits.ai:`);
+    console.log(`- Filename: ${fileName}`);
+    console.log(`- File size: ${fileData.size} bytes`);
+    console.log(`- File extension: ${fileExtension}`);
+    
+    // Create a proper File object with the WAV data for the API
+    const soundFile = new File([fileData], `recording.wav`, { 
+      type: 'audio/wav'
+    });
 
-    console.log(`Preparing file for Kits.ai:`);
-    console.log(`File Name: ${fileName}`);
-    console.log(`File Extension: ${fileExtension}`);
-    console.log(`MIME Type: ${mimeType}`);
-    console.log(`File Size: ${fileData.size} bytes`);
-
-    // Create a file with explicit .wav extension for Kits.ai
-    const soundFile = new File([fileData], `recording.${fileExtension}`, { type: mimeType });
-
-    // **Prepare API request**
+    // Prepare the form data with the correct parameters
     const formData = new FormData();
     formData.append('voiceModelId', voiceModelId);
     formData.append('soundFile', soundFile);
@@ -150,8 +134,13 @@ serve(async (req) => {
     formData.append('modelVolumeMix', modelVolumeMix.toString());
     formData.append('pitchShift', pitchShift.toString());
 
-    // **Send request to Kits.ai**
-    console.log(`Sending request to Kits.ai with model ID: ${voiceModelId}`);
+    // Log the request details
+    console.log('Sending request to Kits.ai:');
+    console.log(`- API endpoint: https://arpeggi.io/api/kits/v1/voice-conversions`);
+    console.log(`- Voice model ID: ${voiceModelId}`);
+    console.log(`- File size being sent: ${soundFile.size} bytes`);
+
+    // Send the request to Kits.ai
     const conversionResponse = await fetch('https://arpeggi.io/api/kits/v1/voice-conversions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${kitsApiKey}` },
@@ -160,6 +149,7 @@ serve(async (req) => {
 
     if (!conversionResponse.ok) {
       const errorText = await conversionResponse.text();
+      console.error(`Kits.ai API response (${conversionResponse.status}):`, errorText);
       throw new Error(`Kits.ai conversion API error: ${errorText}`);
     }
 
@@ -172,7 +162,7 @@ serve(async (req) => {
 
     console.log(`Created conversion with ID: ${conversionId}`);
 
-    // **Poll conversion status**
+    // Poll conversion status
     let outputFileUrl: string | null = null;
     const maxAttempts = 30;
     let delay = 5000;
@@ -218,7 +208,7 @@ serve(async (req) => {
 
     const processedAudioBlob = await processedAudioResponse.blob();
     
-    // Upload processed audio to Supabase Storage
+    // Upload processed audio to Supabase Storage with appropriate file extension
     const processedFileName = `${type}-${Date.now()}.wav`;
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('recordings')
