@@ -25,10 +25,10 @@ export const processAudio = async (audioBlob: Blob): Promise<Blob> => {
 
 export const saveToStorage = async (audioBlob: Blob) => {
   try {
-    // Save as MP3 for compatibility with Kits.ai
+    // Save explicitly as MP3 with the .mp3 extension for compatibility with Kits.ai
     const filename = `recording-${Date.now()}.mp3`;
     
-    // Ensure the blob has the correct MIME type for MP3 (crucial for Kits.ai)
+    // Ensure the blob has the correct MIME type for MP3
     const blobToUpload = new Blob([audioBlob], { type: 'audio/mpeg' });
     
     console.log(`Uploading audio file: ${filename}, type: ${blobToUpload.type}, size: ${blobToUpload.size} bytes`);
@@ -38,7 +38,8 @@ export const saveToStorage = async (audioBlob: Blob) => {
       .from('recordings')
       .upload(filename, blobToUpload, {
         contentType: 'audio/mpeg', // Explicitly set the content type to MP3
-        cacheControl: '3600'
+        cacheControl: '3600',
+        upsert: false // Ensure we don't overwrite existing files
       });
 
     if (error) {
