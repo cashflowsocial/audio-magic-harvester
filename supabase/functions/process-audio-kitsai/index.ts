@@ -68,7 +68,8 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const kitsApiKey = Deno.env.get('KITS_API_KEY') || Deno.env.get('KITS.AI_API_KEY');
+    // Try to get the new API key name first, fall back to the old one if needed
+    const kitsApiKey = Deno.env.get('KITS.AI_API_KEY') || Deno.env.get('KITS_API_KEY');
 
     if (!supabaseUrl || !supabaseKey || !kitsApiKey) {
       throw new Error('Missing required environment variables');
